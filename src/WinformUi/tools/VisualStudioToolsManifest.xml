@@ -1,0 +1,91 @@
+<FileList>
+  <File Reference="WinformUi.dll">
+    <ToolboxItems UIFramework="WinForms" VSCategory="WinformUi 按钮">
+      <Item Type="WinformUi.Controls.FluentButton" />
+      <Item Type="WinformUi.Controls.FluentToggleButton" />
+      <Item Type="WinformUi.Controls.FluentHyperlinkButton" />
+      <Item Type="WinformUi.Controls.FluentSplitButton" />
+      <Item Type="WinformUi.Controls.FluentDropDownButton" />
+    </ToolboxItems>
+    <ToolboxItems UIFramework="WinForms" VSCategory="WinformUi 基础">
+      <Item Type="WinformUi.Controls.FluentLabel" />
+      <Item Type="WinformUi.Controls.FluentIcon" />
+      <Item Type="WinformUi.Controls.FluentPictureBox" />
+      <Item Type="WinformUi.Controls.FluentSeparator" />
+      <Item Type="WinformUi.Controls.FluentScrollBar" />
+      <Item Type="WinformUi.Controls.FluentCodeBlock" />
+      <Item Type="WinformUi.Controls.FluentNotifyIcon" />
+      <Item Type="WinformUi.Controls.FluentAnchor" />
+    </ToolboxItems>
+    <ToolboxItems UIFramework="WinForms" VSCategory="WinformUi 输入">
+      <Item Type="WinformUi.Controls.FluentTextBox" />
+      <Item Type="WinformUi.Controls.FluentRichTextBox" />
+      <Item Type="WinformUi.Controls.FluentMaskedTextBox" />
+      <Item Type="WinformUi.Controls.FluentPasswordBox" />
+      <Item Type="WinformUi.Controls.FluentNumberBox" />
+      <Item Type="WinformUi.Controls.FluentAutoSuggestBox" />
+      <Item Type="WinformUi.Controls.FluentCheckBox" />
+      <Item Type="WinformUi.Controls.FluentRadioButton" />
+      <Item Type="WinformUi.Controls.FluentToggleSwitch" />
+      <Item Type="WinformUi.Controls.FluentSlider" />
+      <Item Type="WinformUi.Controls.FluentComboBox" />
+      <Item Type="WinformUi.Controls.FluentDropDownList" />
+      <Item Type="WinformUi.Controls.FluentRatingControl" />
+      <Item Type="WinformUi.Controls.FluentThumbRate" />
+    </ToolboxItems>
+    <ToolboxItems UIFramework="WinForms" VSCategory="WinformUi 日期时间">
+      <Item Type="WinformUi.Controls.FluentCalendar" />
+      <Item Type="WinformUi.Controls.FluentCalendarDatePicker" />
+      <Item Type="WinformUi.Controls.FluentDatePicker" />
+      <Item Type="WinformUi.Controls.FluentTimePicker" />
+      <Item Type="WinformUi.Controls.FluentColorPicker" />
+    </ToolboxItems>
+    <ToolboxItems UIFramework="WinForms" VSCategory="WinformUi 集合">
+      <Item Type="WinformUi.Controls.FluentListBox" />
+      <Item Type="WinformUi.Controls.FluentCheckedListBox" />
+      <Item Type="WinformUi.Controls.FluentListView" />
+      <Item Type="WinformUi.Controls.FluentTreeView" />
+      <Item Type="WinformUi.Controls.FluentDataGridView" />
+      <Item Type="WinformUi.Controls.FluentGridView" />
+      <Item Type="WinformUi.Controls.FluentTreeGrid" />
+    </ToolboxItems>
+    <ToolboxItems UIFramework="WinForms" VSCategory="WinformUi 导航">
+      <Item Type="WinformUi.Controls.FluentNavigationView" />
+      <Item Type="WinformUi.Controls.FluentTabControl" />
+      <Item Type="WinformUi.Controls.FluentTabView" />
+      <Item Type="WinformUi.Controls.FluentBreadcrumbBar" />
+      <Item Type="WinformUi.Controls.FluentStatusBar" />
+      <Item Type="WinformUi.Controls.FluentStatusStrip" />
+      <Item Type="WinformUi.Controls.FluentScrollViewer" />
+    </ToolboxItems>
+    <ToolboxItems UIFramework="WinForms" VSCategory="WinformUi 容器">
+      <Item Type="WinformUi.Controls.FluentCard" />
+      <Item Type="WinformUi.Controls.FluentSplitContainer" />
+      <Item Type="WinformUi.Controls.FluentCardAction" />
+      <Item Type="WinformUi.Controls.FluentCardColor" />
+      <Item Type="WinformUi.Controls.FluentExpander" />
+      <Item Type="WinformUi.Controls.FluentCardExpander" />
+      <Item Type="WinformUi.Controls.FluentClientAreaBorder" />
+      <Item Type="WinformUi.Controls.FluentTitleBar" />
+      <Item Type="WinformUi.Controls.FluentWrapPanel" />
+      <Item Type="WinformUi.Controls.FluentUniformGrid" />
+    </ToolboxItems>
+    <ToolboxItems UIFramework="WinForms" VSCategory="WinformUi 反馈">
+      <Item Type="WinformUi.Controls.FluentProgressBar" />
+      <Item Type="WinformUi.Controls.FluentProgressRing" />
+      <Item Type="WinformUi.Controls.FluentArc" />
+      <Item Type="WinformUi.Controls.FluentInfoBar" />
+      <Item Type="WinformUi.Controls.FluentErrorProvider" />
+      <Item Type="WinformUi.Controls.FluentBadge" />
+      <Item Type="WinformUi.Controls.FluentInfoBadge" />
+      <Item Type="WinformUi.Controls.FluentSnackbar" />
+      <Item Type="WinformUi.Controls.FluentLoadingScreen" />
+    </ToolboxItems>
+    <ToolboxItems UIFramework="WinForms" VSCategory="WinformUi 菜单">
+      <Item Type="WinformUi.Controls.FluentMenuStrip" />
+      <Item Type="WinformUi.Controls.FluentToolStrip" />
+      <Item Type="WinformUi.Controls.FluentContextMenuStrip" />
+      <Item Type="WinformUi.Controls.FluentToolTip" />
+    </ToolboxItems>
+  </File>
+</FileList>

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFrameworks>net46;net6.0-windows;net8.0-windows;net10.0-windows</TargetFrameworks>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>WinformUi.Gallery</RootNamespace>
+    <AssemblyName>WinformUi.Gallery</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- DPI awareness lives in the manifest because net46 has no SetHighDpiMode API;
+         the same manifest is kept on net6+ (WFO0003 suppressed) so every target
+         gets identical PerMonitorV2 behavior. net6 is kept deliberately (NETSDK1138). -->
+    <NoWarn>$(NoWarn);WFAC010;WFO0003;NETSDK1138</NoWarn>
+    <CheckEolTargetFrameworks>false</CheckEolTargetFrameworks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WinformUi\WinformUi.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net46'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

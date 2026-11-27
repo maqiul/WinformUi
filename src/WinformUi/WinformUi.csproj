@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net46;net6.0-windows;net8.0-windows;net10.0-windows</TargetFrameworks>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>WinformUi</RootNamespace>
+    <AssemblyName>WinformUi</AssemblyName>
+    <Version>1.4.1</Version>
+    <Authors>maqiul</Authors>
+    <Description>Fluent Design style controls for Windows Forms. Supports .NET Framework 4.6+ and .NET 6 / 8 / 10 on Windows.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PackageId>WinformUi</PackageId>
+    <Title>WinformUi - Fluent Design for Windows Forms</Title>
+    <Copyright>Copyright (c) maqiul</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>winforms;fluent;fluent-design;winui;controls;ui;dark-theme;mica;data-binding</PackageTags>
+    <PackageReleaseNotes>1.4.1: two fixes from live testing on .NET Framework 4.6. FluentDataGridView scrollbars no longer leave a stale Fluent thumb in the channel when the mouse wheel scrolls the grid body — a native scrollbar child window moves its thumb by blitting inside SetScrollInfo and never sends WM_PAINT to the subclassed window procedure (RedrawWindow with RDW_UPDATENOW does not deliver one either), so repaints now go through InvalidateRect plus UpdateWindow and also run after the Scroll event. FluentRichTextBox no longer throws System.OverflowException in a 64-bit process after IsTextSelectionEnabled is turned off: the selection gate read WParam.ToInt32() for every message and messages that carry a pointer in wParam (WM_MOUSEACTIVATE with a parent HWND, WM_CTLCOLOR* with an HDC) exceed the Int32 range, so it now masks the low word with WParam.ToInt64() and 0xFFFF. 1.4.0: major control catalog expansion — added FluentIcon (symbol/glyph/image presenter), FluentPictureBox (rounded-corner picture box), FluentToolStrip (themed tool strip), FluentRichTextBox (Fluent rich-text shell with read-only selectable mode), FluentScrollBar (slim auto-hiding scroll bar), FluentCodeBlock (syntax-highlighted, copyable code presenter), FluentTabView (browser-style tab container with reorder and cancelable add/close), FluentNotifyIcon (system tray component), FluentToast (in-app floating notifications), FluentWrapPanel / FluentUniformGrid layout panels, FluentGridView (virtualized tile view with data binding), FluentTreeGrid (multi-column tree list) and FluentTitleBar (custom title bar for borderless forms: drag, double-click maximize, edge resize, system menu); Gallery gained Widgets and Layouts pages; toolbox manifest and Chinese reference docs updated. 1.3.0: added FluentMaskedTextBox, FluentCheckedListBox, FluentErrorProvider, FluentStatusStrip and FluentSplitContainer — native mask validation and editing, per-item check states with data binding, validation borders/icons/tooltips, the native StatusStrip item model, and native split panels with a themed splitter and native non-docked default; all five support light/dark themes and Visual Studio toolbox/designer integration. 1.2.4: fixed the black client area after restoring a minimized window on Windows 11 — DWM discards the redirection surface of backdrop-class windows while minimized and restore does not repaint it automatically; FluentWindow now invalidates itself and its children when restored from minimize. 1.2.3: fixed the DWM system-backdrop enum being off by one against the Windows SDK — "None" silently enabled AUTO (Mica), which could corrupt the window (black client area, stale theme colors) after minimize/restore; Mica/Acrylic/Tabbed now select the correct backdrop types. 1.2.2: fixed white boxes and invisible text after switching to the dark theme — FluentWindow now syncs its BackColor with the theme palette so ambiently-inheriting child controls repaint on the dark surface. 1.2.1: FluentWindow now defaults to a solid Fluent background — the full-client Mica glass pass double-composites GDI-rendered pixels and ghosted text on Windows 11; Mica/Acrylic remain opt-in via BackdropType. 1.2.0: .NET Framework support lowered to 4.6+ — the net48 target is replaced by net46 (one assembly compatible with 4.6 through 4.8); DPI queries fall back to the OS on frameworks without Control.DeviceDpi. 1.1.7: drop-down list no longer hides the items above the selection after picking an item. 1.1.6: "Edit Items..." smart tag link opens the string collection editor in the .NET 6/8/10 out-of-process designer. 1.1.5: native ComboBox-style smart tag — "Use Data Bound Items" checkbox, unbound "Edit Items..." string collection editor, bound data-source drop-down and member fields. 1.1.4: real data-source drop-down + localized smart tag labels. 1.1.3: smart tag in the .NET 6/8/10 out-of-process designer. 1.1.1: ListControl-style data binding. 1.1.0: Chinese manual; categorized toolbox.</PackageReleaseNotes>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\docs\**\*.md" Pack="true" PackagePath="docs/" />
+    <None Include="tools\VisualStudioToolsManifest.xml" Pack="true" PackagePath="tools/" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net4'))">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Design" />
+  </ItemGroup>
+
+  <ItemGroup Condition="!$(TargetFramework.StartsWith('net4'))">
+    <PackageReference Include="Microsoft.WinForms.Designer.SDK" Version="1.6.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Fonts\FluentSystemIcons-Regular.ttf" />
+    <EmbeddedResource Include="Resources\Fonts\FluentSystemIcons-Filled.ttf" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,19 @@
+# 构建产物
+[Bb]in/
+[Oo]bj/
+*.nupkg
+*.snupkg
+*.user
+*.suo
+
+# 本地凭据与 IDE 缓存
+.env
+.vs/
+.vscode/
+
+# 第三方参考源码与本地验证脚手架(不随仓库分发)
+_ref_wpfui/
+_test/
+
+# 本地备份压缩包
+samples/*.zip
