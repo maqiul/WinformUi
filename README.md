@@ -300,5 +300,5 @@ dotnet nuget push src/WinformUi/bin/Release/WinformUi.1.4.1.nupkg \
 
 ## 许可
 
-MIT。图标 glyph 索引等衍生材料的第三方许可声明见
+本项目采用 [MIT 许可](LICENSE)。图标 glyph 索引等衍生材料的第三方许可声明见
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md),随包一并分发。
