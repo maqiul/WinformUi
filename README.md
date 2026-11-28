@@ -207,6 +207,11 @@ Gallery 左侧导航覆盖全部控件分类,Settings 页可切换浅色 / 深�
 
 ## 版本说明
 
+### 1.4.2
+
+- 仅包元数据更新，无代码变更：程序集包内声明了项目主页与 git 仓库地址，
+  nuget.org 页面可直接跳转回 GitHub 源码仓库。
+
 ### 1.4.1
 
 - **DataGridView 滚动条残影**:在表格主体上滚动滚轮(而非拖动滑块)时,滚动条通道里
@@ -230,6 +235,11 @@ FluentWrapPanel / FluentUniformGrid / FluentGridView / FluentTreeGrid / FluentTi
 Gallery 补充小组件与布局页,工具箱清单与中英文参考手册同步。
 
 ## Release notes
+
+### 1.4.2
+
+- Packaging metadata only, no code change: the package now declares its project
+  URL and git repository, so the nuget.org page links back to the GitHub source.
 
 ### 1.4.1
 
@@ -279,7 +289,7 @@ dotnet pack src/WinformUi/WinformUi.csproj -c Release
 发布到 nuget.org(需要自己的账号与 API Key):
 
 ```bash
-dotnet nuget push src/WinformUi/bin/Release/WinformUi.1.4.1.nupkg \
+dotnet nuget push src/WinformUi/bin/Release/WinformUi.1.4.2.nupkg \
     --api-key <YOUR_API_KEY> --source https://api.nuget.org/v3/index.json
 ```
 
