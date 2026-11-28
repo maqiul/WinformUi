@@ -1,6 +1,65 @@
 # 对话框与弹出层控件
 
-本篇介绍 WinformUi 的对话框与弹出层:`FluentContentDialog`(窗体内模态内容对话框)、`FluentFlyout`(锚定弹出层)、`FluentPopupForm`(无边框圆角弹出窗体)和 `FluentToolTip`(Fluent 风格工具提示)。均位于命名空间 `WinformUi.Controls`。示例代码省略 `using` 行,使用时请引入 `System`、`System.Drawing`、`System.Windows.Forms`、`WinformUi.Controls`、`WinformUi.Theming` 等命名空间。
+本篇介绍 WinformUi 的对话框与弹出层:`FluentMessageBox`(Fluent 风格消息框)、`FluentContentDialog`(窗体内模态内容对话框)、`FluentFlyout`(锚定弹出层)、`FluentPopupForm`(无边框圆角弹出窗体)和 `FluentToolTip`(Fluent 风格工具提示)。均位于命名空间 `WinformUi.Controls`。示例代码省略 `using` 行,使用时请引入 `System`、`System.Drawing`、`System.Windows.Forms`、`WinformUi.Controls`、`WinformUi.Theming` 等命名空间。
+
+## FluentMessageBox
+
+Fluent 消息框:静态类,弹出一个无边框、圆角、随主题换肤的模态对话框,顶部可选严重级别图标与标题,底部分隔线下方排布按钮,同步返回 `DialogResult`。
+
+### 方法
+
+| 重载 | 说明 |
+| --- | --- |
+| `static DialogResult Show(string text)` | 只显示正文,无标题无图标,单个 OK 按钮。 |
+| `static DialogResult Show(string text, string title)` | 带标题,单个 OK 按钮。 |
+| `static DialogResult Show(IWin32Window owner, string text, string title, MessageBoxButtons buttons, MessageBoxIcon icon)` | 完整重载。`owner` 为 null 时以当前活动窗体为宿主(无宿主则按屏幕居中);`buttons` 决定按钮组合;`icon` 决定标题左侧的级别图标。 |
+
+参数取值均为 WinForms 标准枚举:
+
+| MessageBoxButtons | 按钮(左→右) | 主按钮 |
+| --- | --- | --- |
+| OK | OK | OK |
+| OKCancel | OK、Cancel | OK |
+| YesNo | Yes、No | Yes |
+| YesNoCancel | Yes、No、Cancel | Yes |
+| RetryCancel | Retry、Cancel | Retry |
+| AbortRetryIgnore | Abort、Retry、Ignore | Retry |
+
+| MessageBoxIcon | 图标 | 颜色 |
+| --- | --- | --- |
+| None | 不绘制 | — |
+| Information | 信息符号 | `SystemFillAttention` |
+| Warning | 警告三角 | `SystemFillCaution` |
+| Error | 错误圆圈 | `SystemFillCritical` |
+| Question | 问号 | `SystemFillAttention` |
+
+### 示例
+
+```csharp
+// 最简单的提示
+FluentMessageBox.Show("已保存到剪贴板");
+
+// 确认对话框
+if (FluentMessageBox.Show(null, "删除后无法恢复,确定继续吗?", "删除记录",
+        MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+{
+    DeleteSelected();
+}
+
+// 父窗体拥有焦点与位置
+DialogResult result = FluentMessageBox.Show(this, "网络请求失败,是否重试?", "离线",
+    MessageBoxButtons.RetryCancel, MessageBoxIcon.Error);
+```
+
+### 备注
+
+- 对话框为 `FormBorderStyle.None` + 圆角 Region,`ShowInTaskbar = false`、`TopMost = true`,
+  `StartPosition = CenterParent`;固定宽 440 像素,高度按正文换行后的实际行数计算。
+- 主按钮使用 `ControlAppearance.Primary` 并成为 `AcceptButton`(回车触发);带 `DialogResult.Cancel`
+  的按钮成为 `CancelButton`(Esc 触发)。按钮文字为英文 OK/Cancel/Yes/No/Retry/Abort/Ignore,
+  需要本地化文案时请改用 `FluentContentDialog`。
+- `Show` 是阻塞的模态调用,返回值即用户点击的按钮;内部对话框实例在返回前已 `Dispose`。
+- 标题与图标都为空时不绘制头部,对话框更紧凑;标题非空但图标为 None 时只画标题文字。
 
 ## FluentContentDialog
 

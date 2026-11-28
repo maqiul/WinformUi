@@ -1,6 +1,6 @@
 # 反馈与进度控件
 
-本篇介绍 WinformUi 中用于向用户传达状态与结果的控件:`FluentProgressBar`、`FluentProgressRing`、`FluentInfoBar`、`FluentBadge`、`FluentInfoBadge`、`FluentSnackbar`、`FluentErrorProvider`、`FluentLoadingScreen`。所有类型位于命名空间 `WinformUi.Controls`,配色随 `ApplicationThemeManager` 当前主题自动切换。示例代码省略 `using` 行,使用时请引入 `System`、`System.Drawing`、`System.Windows.Forms`、`WinformUi.Controls`、`WinformUi.Theming` 等命名空间。
+本篇介绍 WinformUi 中用于向用户传达状态与结果的控件:`FluentProgressBar`、`FluentProgressRing`、`FluentInfoBar`、`FluentBadge`、`FluentInfoBadge`、`FluentSnackbar`、`FluentErrorProvider`、`FluentLoadingScreen`、`FluentTaskbarProgress`。所有类型位于命名空间 `WinformUi.Controls`,配色随 `ApplicationThemeManager` 当前主题自动切换。示例代码省略 `using` 行,使用时请引入 `System`、`System.Drawing`、`System.Windows.Forms`、`WinformUi.Controls`、`WinformUi.Theming` 等命名空间。
 
 ## FluentProgressBar
 
@@ -453,3 +453,86 @@ loading.HideScreen();
 - 加载层会覆盖父容器并拦截交互,加载结束后必须调用 `HideScreen()`。
 - 隐藏后实例已被释放,不要再次访问。
 - 示例应放在实际加载任务完成或失败的分支中,不要加载后一直保留遮罩。
+
+## FluentTaskbarProgress
+
+非可视化组件(`Component`):把进度画在窗体的**任务栏按钮**上,支持不确定动画、确定进度、暂停(琥珀色)与错误(红色)四种状态,对应 Windows 壳层的 `ITaskbarList3`。把它拖到窗体的组件栏并指定 `Form` 即可,值变化实时生效。
+
+### 属性
+
+| 属性 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| Form | Form | null | 显示进度的窗体。赋值时订阅 `HandleCreated`/`FormClosed`:句柄已存在则立即应用,尚未创建则等创建后自动补画;换绑或置 null 会先清除旧窗体按钮上的进度。 |
+| State | TaskbarProgressState | None | 任务栏进度状态,枚举值见下表。 |
+| Value | int | 0 | 已完成量,范围 `0 ~ Total`;小于 0 自动收敛为 0,大于 Total 在写壳层时按 Total 截断。 |
+| Total | int | 100 | 总量;`<= 0` 归一化为 100。 |
+| IsSupported(静态) | bool | — | 只读,当前系统是否提供任务栏进度接口(Windows 7 及以上为 true)。 |
+
+### TaskbarProgressState
+
+数值与壳层 `TBPFLAG` 完全一致,可直接透传:
+
+| 值 | 数值 | 外观 |
+| --- | --- | --- |
+| None | 0 | 不显示进度。 |
+| Indeterminate | 1 | 绿色来回滚动的不确定动画。 |
+| Normal | 2 | 系统强调色的确定进度条。 |
+| Error | 4 | 红色的确定进度条。 |
+| Paused | 8 | 琥珀色的确定进度条。 |
+
+### 事件/方法
+
+| 成员 | 签名 | 说明 |
+| --- | --- | --- |
+| 构造 | `FluentTaskbarProgress()` | 独立实例,自行设置 `Form`。 |
+| 构造 | `FluentTaskbarProgress(IContainer container)` | 加入容器(设计器的组件栏)由其接管释放。 |
+| Apply | `void Apply()` | 用当前 `State`/`Value`/`Total` 重画一次,句柄重建后可手动调用。 |
+| Reset | `void Reset()` | 清除任务栏按钮上的进度并把 `State` 复位为 `None`。 |
+
+### 示例
+
+```csharp
+// 窗体字段
+private FluentTaskbarProgress _taskbar;
+
+private void OnLoad(EventArgs e)
+{
+    _taskbar = new FluentTaskbarProgress { Form = this };
+}
+
+private async Task DownloadAsync()
+{
+    if (!FluentTaskbarProgress.IsSupported) return;
+
+    _taskbar.Total = 100;
+    _taskbar.State = TaskbarProgressState.Normal;
+    foreach (int percent in await GetProgressAsync())
+    {
+        _taskbar.Value = percent;           // 任务栏按钮实时填充
+    }
+
+    try
+    {
+        await CommitAsync();
+        _taskbar.Reset();                   // 成功后清除
+    }
+    catch
+    {
+        _taskbar.State = TaskbarProgressState.Error;
+        _taskbar.Value = _taskbar.Total;    // 红色满条提示失败
+    }
+}
+
+// 耗时不明的阶段用不确定动画
+_taskbar.State = TaskbarProgressState.Indeterminate;
+```
+
+### 备注
+
+- `Value` 只在 `Normal`/`Error`/`Paused` 三种确定状态下写回壳层;`Indeterminate` 与 `None` 只设置状态,避免壳层把滚动动画当成数值条。
+- 壳层的 `ITaskbarList3` 对象按 UI 线程缓存且不会释放:提前 `Marshal.ReleaseComObject` 会让任务栏按钮丢掉正在显示的进度条,因此组件内部保留单例、`Dispose` 时只解除窗体订阅。
+- 属性可从任意线程设置:组件会把写壳层的动作 `BeginInvoke` 编组到窗体的 UI 线程,不会在工作线程上另建一个 `ITaskbarList3`。窗体句柄尚未创建时本次更新直接跳过,`HandleCreated` 之后自动补画。
+- 系统不支持或组策略禁用时,所有调用静默忽略,进度不显示但不会抛异常;可先用 `IsSupported` 判断。
+- 多窗体应用应各自创建一个组件实例并把 `Form` 指向自己的顶层窗体,任务栏按钮彼此独立。
+- 窗体关闭时会自动清除该按钮上的进度,无需手动 `Reset()`。
+

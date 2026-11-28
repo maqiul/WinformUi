@@ -80,6 +80,7 @@
       <Item Type="WinformUi.Controls.FluentInfoBadge" />
       <Item Type="WinformUi.Controls.FluentSnackbar" />
       <Item Type="WinformUi.Controls.FluentLoadingScreen" />
+      <Item Type="WinformUi.Controls.FluentTaskbarProgress" />
     </ToolboxItems>
     <ToolboxItems UIFramework="WinForms" VSCategory="WinformUi 菜单">
       <Item Type="WinformUi.Controls.FluentMenuStrip" />

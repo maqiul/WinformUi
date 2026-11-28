@@ -4,29 +4,63 @@
 
 ## FluentPage
 
-可导航页面的基类(继承 `UserControl`):不透明层状表面、DPI 自动缩放,主题切换时自动更新背景色。
+可导航页面的基类(继承 `UserControl`,实现 `INavigationAware`):不透明层状表面、DPI 自动缩放,主题切换时自动更新背景色。
 
 ### 属性
 
-本类未声明新的公开属性,继承 UserControl 的全部属性。构造函数预设:`Padding = new Padding(24, 16, 24, 24)`、`AutoScaleMode = AutoScaleMode.Dpi`、背景为主题的 Layer 表面色。受保护属性 `SurfaceColor`(Color)可供派生类取当前层表面色。
+| 属性 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| NavigationCacheMode | NavigationCacheMode | Enabled | 本页面在宿主 `FluentFrame` 中的缓存策略,详见下文枚举说明。 |
+
+其余继承 UserControl 的全部属性。构造函数预设:`Padding = new Padding(24, 16, 24, 24)`、`AutoScaleMode = AutoScaleMode.Dpi`、背景为主题的 Layer 表面色。受保护属性 `SurfaceColor`(Color)可供派生类取当前层表面色。
 
 ### 事件
 
-本类未声明新事件,继承标准 Control/UserControl 事件。
+本类未声明新事件,继承标准 Control/UserControl 事件。页面生命周期通过重写虚方法获得:
+
+| 受保护虚方法 | 说明 |
+| --- | --- |
+| `virtual void OnNavigatedTo(NavigationEventArgs e)` | 页面成为当前页之后调用(含前进/后退/刷新回到本页)。 |
+| `virtual void OnNavigatedFrom(NavigationEventArgs e)` | 页面即将不再是当前页之前调用。 |
+
+`INavigationAware` 在 `FluentPage` 上是显式实现,派生类只需重写 `protected virtual` 版本;若要给非 `FluentPage` 的任意 `Control` 加生命周期,自行实现 `INavigationAware` 接口即可。
+
+### NavigationCacheMode
+
+| 值 | 说明 |
+| --- | --- |
+| Disabled | 不缓存。离开该页时页面实例被 `Dispose`,再次导航进入会重新构造。 |
+| Enabled | 受 `FluentFrame.CacheSize` 上限约束的缓存(默认)。超出上限时按最久未使用淘汰。 |
+| Required | 永久缓存,不计入 `CacheSize`,也不会被淘汰;适合承载昂贵状态的页。 |
+
+### NavigationMode 与 NavigationEventArgs
+
+`NavigationMode` 标识本次导航到达方式:`New`(全新导航)、`Back`(后退)、`Forward`(前进)、`Refresh`(对同一"类型+参数"重复导航,仅复位历史)。
+
+`NavigationEventArgs` 携带 `PageType`(Type)、`Parameter`(object)、`Mode`(NavigationMode)、`CacheMode`(NavigationCacheMode)。
 
 ### 示例
 
 ```csharp
-public class HomePage : FluentPage
+public class DetailPage : FluentPage
 {
-    public HomePage()
+    private readonly FluentLabel _title = new FluentLabel { AutoSize = true };
+
+    public DetailPage()
     {
-        Controls.Add(new FluentLabel
-        {
-            Text = "欢迎",
-            AutoSize = true,
-            Location = new Point(24, 24)
-        });
+        // 参数相同的实例复用,不同订单各自独立缓存
+        NavigationCacheMode = NavigationCacheMode.Enabled;
+        Controls.Add(_title);
+    }
+
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        _title.Text = "订单 " + e.Parameter;
+    }
+
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        // 离开前暂停动画、提交编辑
     }
 }
 ```
@@ -34,42 +68,62 @@ public class HomePage : FluentPage
 ### 备注
 
 - 页面背景刻意保持不透明,避免透明背景在真实窗口句柄上引发递归父级绘制导致的残影;请勿将其 BackColor 改为 Transparent。
+- 主题切换时页面底色会推迟到本轮通知派发完成后再计算:页面比宿主窗体更早收到主题事件,
+  当场混合会把新令牌叠在窗体的旧背景上并固化下来(深色下表现为偏亮的灰底)。
+
 
 ## FluentFrame
 
-带历史记录的导航宿主(继承 `Panel`):按页面类型缓存实例并停靠显示,内容区绘制左上圆角的 Fluent 层表面。
+带历史记录与参数缓存的导航宿主(继承 `Panel`):按"页面类型 + 导航参数"缓存实例并停靠显示,内容区绘制左上圆角的 Fluent 层表面。
 
 ### 属性
 
 | 属性 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | CurrentPage | Control | null | 只读,当前显示的页面实例。 |
+| CurrentPageType | Type | null | 只读,当前页面的类型。 |
+| CurrentParameter | object | null | 只读,到达当前页时使用的导航参数。 |
+| CurrentCacheMode | NavigationCacheMode | Enabled | 只读,当前页生效的缓存模式(非 `FluentPage` 一律按 Enabled)。 |
 | CanGoBack | bool | false | 只读,历史栈中是否可后退。 |
 | CanGoForward | bool | false | 只读,历史栈中是否可前进。 |
+| CacheSize | int | 10 | 保留的 Enabled 页面数量上限;设为 0 等同于全部不缓存。赋负值抛 `ArgumentOutOfRangeException`。`Required` 页面不计入。 |
+| PageFactory | Func&lt;Type, object, Control&gt; | null | 可选的页面工厂,替代无参构造。参数为页面类型与导航参数;返回 null 抛 `InvalidOperationException`。 |
 
 ### 事件
 
 | 事件 | 说明 |
 | --- | --- |
-| Navigated | 每次导航完成后触发,包括 Navigate、GoBack、GoForward。 |
+| Navigated | 每次导航完成后触发,包括 Navigate、GoBack、GoForward 与同页刷新。事件参数为 `NavigationEventArgs`(在 `FluentPage`/`FluentFrame` 一节说明)。 |
 
 公开方法:
 
 | 方法 | 说明 |
 | --- | --- |
-| Control Navigate(Type pageType) | 导航到指定页面类型(必须是 Control 类型);首次访问时用无参构造创建实例并缓存,返回页面实例。 |
+| Control Navigate(Type pageType) | 以空参数导航到指定页面类型(必须是 Control 类型),返回页面实例。 |
+| Control Navigate(Type pageType, object parameter) | 带参数导航。`parameter` 参与缓存键与历史记录,同一类型不同参数会得到不同实例;`e.Parameter` 在 `OnNavigatedTo` 中可读回。 |
 | T Navigate&lt;T&gt;() where T : Control | 泛型版导航,返回强类型页面。 |
-| void GoBack() | 后退到历史中的上一页(CanGoBack 为 false 时无操作)。 |
-| void GoForward() | 前进到历史中的下一页(CanGoForward 为 false 时无操作)。 |
+| T Navigate&lt;T&gt;(object parameter) where T : Control | 泛型带参导航。 |
+| void GoBack() | 后退到历史中的上一页(CanGoBack 为 false 时无操作),`Mode` 为 Back。 |
+| void GoForward() | 前进到历史中的下一页(CanGoForward 为 false 时无操作),`Mode` 为 Forward。 |
 
 ### 示例
 
 ```csharp
-var frame = new FluentFrame { Dock = DockStyle.Fill };
-frame.Navigated += (s, e) => Console.WriteLine(frame.CurrentPage.GetType().Name);
+var frame = new FluentFrame { Dock = DockStyle.Fill, CacheSize = 6 };
+
+// 没有无参构造的页面交给工厂创建
+frame.PageFactory = (type, parameter) =>
+    type == typeof(DetailPage) ? new DetailPage((string)parameter) : (Control)Activator.CreateInstance(type);
+
+frame.Navigated += (s, e) =>
+{
+    var args = (NavigationEventArgs)e;
+    Console.WriteLine(args.PageType.Name + " [" + args.Mode + "] " + args.Parameter);
+};
 
 frame.Navigate<HomePage>();
-frame.Navigate(typeof(SettingsPage));
+frame.Navigate(typeof(DetailPage), "A-1001");
+frame.Navigate(typeof(DetailPage), "A-1002");   // 独立实例,互不覆盖
 if (frame.CanGoBack) frame.GoBack();
 if (frame.CanGoForward) frame.GoForward();
 
@@ -78,8 +132,12 @@ Controls.Add(frame);
 
 ### 备注
 
-- 页面按 Type 缓存、实例复用(切换只是显示/隐藏),因此页面类型必须提供公共无参构造函数。
+- 缓存键与历史条目都是 `页面类型 + 参数`,因此"同一类型不同参数"不会被误当作同一页复用。
+- 历史中的同一条目重复导航不会新增记录;当前页与目标"类型+参数"完全一致时只触发一次 `Mode = Refresh` 的生命周期回调。
+- `PageFactory` 为空时要求页面类型提供公共无参构造;有工厂时由工厂负责处理参数。
 - 在同一位置导航到新页面会截断其后的前进历史,与浏览器行为一致。
+- 离开页面时,`Disabled` 页(以及 `CacheSize = 0` 时的 `Enabled` 页)会被立即 `Dispose`;`Enabled` 页超出 `CacheSize` 时按最久未使用淘汰,`Required` 页永不淘汰。
+- 调用方自己 `Dispose` 掉 `Navigate` 返回的页面是允许的:缓存条目会在下次导航时发现对象已释放并自动重建一个新实例。
 
 ## NavigationViewItem
 
@@ -92,9 +150,41 @@ Controls.Add(frame);
 | Content | string | null | 菜单项显示文本。 |
 | Icon | SymbolRegular | SymbolRegular.Empty | 菜单图标;为 Empty 时不绘制。 |
 | TargetPageType | Type | null | 点击后要导航到的页面类型;为 null 时只选中不导航。 |
-| Tag | object | null | 任意附加数据。 |
+| Tag | object | null | 作为导航参数传给 `FluentFrame.Navigate(TargetPageType, Tag)`,同时可用于附加数据。 |
 
 构造函数:`NavigationViewItem()`、`NavigationViewItem(string content, SymbolRegular icon, Type targetPageType)`。
+
+### NavigationViewItemHeader 与 NavigationViewItemSeparator
+
+两者都继承 `NavigationViewItem`,用于把菜单分组,但不可选中、不可导航、不参与命中测试:
+
+| 类型 | 构造 | 展开侧栏 | 折叠侧栏 |
+| --- | --- | --- | --- |
+| `NavigationViewItemHeader` | `()`、`(string text)` | 34 像素小标题,只显示 `Content`(图标与 TargetPageType 被忽略) | 高度 0,不占位 |
+| `NavigationViewItemSeparator` | `()` | 16 像素高的分隔线(`DividerStrokeDefault`) | 12 像素 |
+
+```csharp
+navigation.MenuItems.Add(new NavigationViewItemHeader("组件"));
+navigation.MenuItems.Add(new NavigationViewItem("Buttons", SymbolRegular.Keyboard24, typeof(ButtonsPage)));
+navigation.MenuItems.Add(new NavigationViewItem("Collections", SymbolRegular.List24, typeof(CollectionsPage)));
+navigation.MenuItems.Add(new NavigationViewItemSeparator());
+navigation.MenuItems.Add(new NavigationViewItemHeader("应用"));
+navigation.MenuItems.Add(new NavigationViewItem("Settings", SymbolRegular.Settings24, typeof(SettingsPage)));
+navigation.FooterMenuItems.Add(new NavigationViewItem("About", SymbolRegular.Info24, typeof(AboutPage)));
+```
+
+`SelectItem` 与鼠标点击都会自动跳过这两类项,`SelectedItem` 永远不会是它们。
+
+### 带参数导航
+
+`Tag` 即导航参数,因此同一个页面类型可以注册多个入口:
+
+```csharp
+navigation.MenuItems.Add(new NavigationViewItem("订单 1001", SymbolRegular.Document24, typeof(DetailPage)) { Tag = "A-1001" });
+navigation.MenuItems.Add(new NavigationViewItem("订单 1002", SymbolRegular.Document24, typeof(DetailPage)) { Tag = "A-1002" });
+// 点击后 DetailPage.OnNavigatedTo 收到 e.Parameter == "A-1001" / "A-1002"
+```
+
 
 ## FluentNavigationView
 
@@ -104,10 +194,10 @@ Fluent 导航视图:左侧图标菜单栏、选中项强调色竖条、汉堡按
 
 | 属性 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| MenuItems | List&lt;NavigationViewItem&gt; | 空列表 | 只读集合,主菜单项(汉堡按钮下方从上排列);直接 Add 填充。 |
-| FooterMenuItems | List&lt;NavigationViewItem&gt; | 空列表 | 只读集合,底部菜单项(贴底排列,上方有分隔线),常放"设置"。 |
-| Frame | FluentFrame | 内置实例 | 只读,内容框架;高级场景可直接对它 Navigate/GoBack/GoForward。 |
-| IsPaneOpen | bool | true | 侧栏是否展开;false 时折叠为 48 像素宽、只显示图标。 |
+| MenuItems | List&lt;NavigationViewItem&gt; | 空列表 | 只读集合,主菜单项(汉堡按钮下方从上排列);直接 Add 填充。可混入 `NavigationViewItemHeader`/`NavigationViewItemSeparator` 分组。 |
+| FooterMenuItems | List&lt;NavigationViewItem&gt; | 空列表 | 只读集合,底部菜单项(贴底排列,上方有分隔线),常放"设置"。同样支持分组标题与分隔线。 |
+| Frame | FluentFrame | 内置实例 | 只读,内容框架;高级场景可直接对它 Navigate(含带参)/GoBack/GoForward,也可设置 `CacheSize`、`PageFactory`。 |
+| IsPaneOpen | bool | true | 侧栏是否展开;false 时折叠为 48 像素宽、只显示图标(分组标题此时不占位)。 |
 | PaneWidth | int | 220 | 展开状态的侧栏宽度(像素)。 |
 | SelectedItem | NavigationViewItem | null | 当前选中项;赋值等价于 `SelectItem(value, true)`(会导航)。 |
 
@@ -116,18 +206,23 @@ Fluent 导航视图:左侧图标菜单栏、选中项强调色竖条、汉堡按
 | 事件 | 说明 |
 | --- | --- |
 | SelectionChanged | 选中项变化时触发:点击菜单/底部项、调用 SelectItem 或设置 SelectedItem。 |
+| Frame.Navigated | 内容框架的导航事件(可拿到 `NavigationEventArgs` 的 Mode/Parameter)。 |
 
-公开方法:`void SelectItem(NavigationViewItem item, bool navigate)` —— 选中指定项;navigate 为 true 且该项 TargetPageType 非空时同步导航内容框架。item 为 null 或与当前选中项相同时无操作。
+公开方法:`void SelectItem(NavigationViewItem item, bool navigate)` —— 选中指定项;navigate 为 true 且该项 TargetPageType 非空时,以 `item.Tag` 作为导航参数调用 `_frame.Navigate(TargetPageType, Tag)`。item 为 null、与当前选中项相同、或是分组标题/分隔线时无操作。
 
 ### 示例
 
-参照 Gallery 主窗体的真实用法,菜单项通过 `TargetPageType` 与页面类型绑定:
+参照 Gallery 主窗体的真实用法,菜单项通过 `TargetPageType` 与页面类型绑定,`Tag` 作为导航参数:
 
 ```csharp
 var navigation = new FluentNavigationView { Dock = DockStyle.Fill };
+navigation.MenuItems.Add(new NavigationViewItemHeader("浏览"));
 navigation.MenuItems.Add(new NavigationViewItem("Home", SymbolRegular.Home24, typeof(HomePage)));
 navigation.MenuItems.Add(new NavigationViewItem("Buttons", SymbolRegular.Keyboard24, typeof(ButtonsPage)));
 navigation.MenuItems.Add(new NavigationViewItem("Collections", SymbolRegular.List24, typeof(CollectionsPage)));
+navigation.MenuItems.Add(new NavigationViewItemSeparator());
+navigation.MenuItems.Add(new NavigationViewItemHeader("详情"));
+navigation.MenuItems.Add(new NavigationViewItem("订单 A-1001", SymbolRegular.Document24, typeof(DetailPage)) { Tag = "A-1001" });
 navigation.FooterMenuItems.Add(new NavigationViewItem("Settings", SymbolRegular.Settings24, typeof(SettingsPage)));
 
 navigation.SelectionChanged += (s, e) =>
@@ -135,25 +230,27 @@ navigation.SelectionChanged += (s, e) =>
 
 Controls.Add(navigation);
 
-// 初始选中第一项并导航到 HomePage
-navigation.SelectItem(navigation.MenuItems[0], true);
+// 初始选中第一个真正可选项并导航到 HomePage
+navigation.SelectItem(navigation.MenuItems[1], true);
 
 // 只切换高亮、不导航
-navigation.SelectItem(navigation.MenuItems[1], false);
+navigation.SelectItem(navigation.MenuItems[2], false);
 
 // 折叠/展开侧栏
 navigation.IsPaneOpen = false;
 navigation.PaneWidth = 260;
 
-// 直接使用内容框架做前进后退
+// 直接使用内容框架做带参导航与前进后退
+navigation.Frame.Navigate(typeof(DetailPage), "A-1002");
 navigation.Frame.GoBack();
 ```
 
 ### 备注
 
-- 构造函数中 `Dock = DockStyle.Fill`;菜单项行高 38 像素,汉堡按钮区 48 像素,折叠宽度固定 48。
+- 构造函数中 `Dock = DockStyle.Fill`;普通菜单项行高 38 像素,分组标题 34 像素(折叠时 0)、分隔线 16 像素(折叠时 12),汉堡按钮区 48 像素,折叠宽度固定 48。
 - 点击汉堡按钮切换 IsPaneOpen;底部项与主菜单项共用同一选中态(同一时刻只有一个 SelectedItem)。
-- 页面由内部 FluentFrame 按类型缓存,页面类需为 Control 派生且具有公共无参构造(通常继承 FluentPage)。
+- 页面由内部 FluentFrame 按"类型 + Tag 参数"缓存,默认 `CacheSize = 10`。页面类需为 Control 派生:未设置 `navigation.Frame.PageFactory` 时必须具有公共无参构造(通常继承 FluentPage)。
+
 
 ## FluentTabPage
 

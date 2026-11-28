@@ -31,6 +31,7 @@ namespace WinformUi.Gallery
             _navigation.MenuItems.Add(new NavigationViewItem("Menus", SymbolRegular.Navigation24, typeof(MenusPage)));
             _navigation.MenuItems.Add(new NavigationViewItem("Widgets", SymbolRegular.ClipboardTextLtr24, typeof(WidgetsPage)));
             _navigation.MenuItems.Add(new NavigationViewItem("Layouts", SymbolRegular.DataUsageToolbox24, typeof(LayoutsPage)));
+            _navigation.MenuItems.Add(new NavigationViewItem("Navigation", SymbolRegular.PanelLeft24, typeof(NavigationPage)));
             _navigation.FooterMenuItems.Add(new NavigationViewItem("Settings", SymbolRegular.Settings24, typeof(SettingsPage)));
 
             _statusStrip = new FluentStatusStrip();

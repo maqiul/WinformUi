@@ -1,6 +1,6 @@
 # Feedback and Progress Controls
 
-This chapter introduces the controls WinformUi uses to communicate status and results to the user: `FluentProgressBar`, `FluentProgressRing`, `FluentInfoBar`, `FluentBadge`, `FluentInfoBadge`, `FluentSnackbar`, `FluentErrorProvider` and `FluentLoadingScreen`. All types live in the `WinformUi.Controls` namespace and their colors follow the current `ApplicationThemeManager` theme automatically. The example code omits the `using` lines; when using it, import the `System`, `System.Drawing`, `System.Windows.Forms`, `WinformUi.Controls`, `WinformUi.Theming`, etc. namespaces.
+This chapter introduces the controls WinformUi uses to communicate status and results to the user: `FluentProgressBar`, `FluentProgressRing`, `FluentInfoBar`, `FluentBadge`, `FluentInfoBadge`, `FluentSnackbar`, `FluentErrorProvider`, `FluentLoadingScreen` and `FluentTaskbarProgress`. All types live in the `WinformUi.Controls` namespace and their colors follow the current `ApplicationThemeManager` theme automatically. The example code omits the `using` lines; when using it, import the `System`, `System.Drawing`, `System.Windows.Forms`, `WinformUi.Controls`, `WinformUi.Theming`, etc. namespaces.
 
 ## FluentProgressBar
 
@@ -453,3 +453,96 @@ loading.HideScreen();
 - The loading layer covers the parent container and intercepts interaction, so `HideScreen()` must be called once the loading is over.
 - After hiding, the instance has been disposed; do not access it again.
 - Put the call in the branch where the actual loading task finishes or fails; do not keep the overlay up forever after loading.
+
+## FluentTaskbarProgress
+
+A non-visual `Component` that paints progress on the form's **taskbar button**, covering the
+indeterminate animation plus determinate, paused (amber) and error (red) states through the shell's
+`ITaskbarList3`. Drop it on a form's component tray, set `Form`, and the value updates live.
+
+### Properties
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| Form | Form | null | The form whose taskbar button shows progress. Assigning subscribes to `HandleCreated`/`FormClosed`: the state is applied immediately when the handle exists and replayed once it is created; rebinding or assigning null first clears the progress on the previous button. |
+| State | TaskbarProgressState | None | The taskbar progress state; see the table below. |
+| Value | int | 0 | Completed amount, in the range `0 ~ Total`; below 0 it is clamped to 0, above Total it is clipped to Total when written to the shell. |
+| Total | int | 100 | The total; values `<= 0` are normalized to 100. |
+| IsSupported (static) | bool | — | Read-only, whether the current OS exposes taskbar progress (true on Windows 7 and later). |
+
+### TaskbarProgressState
+
+The numbers match the shell's `TBPFLAG` exactly, so they pass straight through:
+
+| Value | Number | Appearance |
+| --- | --- | --- |
+| None | 0 | No progress shown. |
+| Indeterminate | 1 | Green animation sliding back and forth. |
+| Normal | 2 | Determinate bar in the system accent color. |
+| Error | 4 | Determinate bar in red. |
+| Paused | 8 | Determinate bar in amber. |
+
+### Events and methods
+
+| Member | Signature | Description |
+| --- | --- | --- |
+| Constructor | `FluentTaskbarProgress()` | Standalone instance; set `Form` yourself. |
+| Constructor | `FluentTaskbarProgress(IContainer container)` | Adds itself to a container (the designer's component tray) so the container disposes it. |
+| Apply | `void Apply()` | Repaints with the current `State`/`Value`/`Total`; useful after the handle was recreated. |
+| Reset | `void Reset()` | Clears the taskbar button and returns `State` to `None`. |
+
+### Example
+
+```csharp
+// form field
+private FluentTaskbarProgress _taskbar;
+
+private void OnLoad(EventArgs e)
+{
+    _taskbar = new FluentTaskbarProgress { Form = this };
+}
+
+private async Task DownloadAsync()
+{
+    if (!FluentTaskbarProgress.IsSupported) return;
+
+    _taskbar.Total = 100;
+    _taskbar.State = TaskbarProgressState.Normal;
+    foreach (int percent in await GetProgressAsync())
+    {
+        _taskbar.Value = percent;           // the taskbar button fills in real time
+    }
+
+    try
+    {
+        await CommitAsync();
+        _taskbar.Reset();                   // clear on success
+    }
+    catch
+    {
+        _taskbar.State = TaskbarProgressState.Error;
+        _taskbar.Value = _taskbar.Total;    // full red bar to signal failure
+    }
+}
+
+// Use the indeterminate animation for a phase with unknown duration
+_taskbar.State = TaskbarProgressState.Indeterminate;
+```
+
+### Notes
+
+- `Value` is only written to the shell in the `Normal`/`Error`/`Paused` states; `Indeterminate` and
+  `None` set the state alone, so the shell never turns the sliding animation into a numeric bar.
+- The shell's `ITaskbarList3` object is cached per UI thread and never released: calling
+  `Marshal.ReleaseComObject` makes the taskbar button drop the progress bar it was showing, so the
+  component keeps one instance and `Dispose` only unhooks the form events.
+- The properties may be set from any thread: the component marshals the shell call with
+  `BeginInvoke` onto the thread that owns the form, so a worker thread never builds a second
+  `ITaskbarList3`. If the form handle does not exist yet the update is skipped and reapplied
+  automatically once `HandleCreated` fires.
+- When the OS does not support it or group policy disables it, the calls are ignored silently:
+  no progress appears but nothing throws. Check `IsSupported` first.
+- In a multi-form application give each top-level form its own component instance and point `Form`
+  at it; taskbar buttons stay independent.
+- Closing the form clears the progress on its button automatically, so an explicit `Reset()` is not
+  required.

@@ -8,8 +8,49 @@ using WinformUi.Theming;
 
 namespace WinformUi.Controls
 {
+    /// <summary>Specifies whether a navigated page is cached by its frame.</summary>
+    public enum NavigationCacheMode
+    {
+        Disabled,
+        Enabled,
+        Required
+    }
+
+    /// <summary>Identifies how a page was reached.</summary>
+    public enum NavigationMode
+    {
+        New,
+        Back,
+        Forward,
+        Refresh
+    }
+
+    /// <summary>Describes a page navigation and its parameter.</summary>
+    public sealed class NavigationEventArgs : EventArgs
+    {
+        public NavigationEventArgs(Type pageType, object parameter, NavigationMode mode, NavigationCacheMode cacheMode)
+        {
+            PageType = pageType;
+            Parameter = parameter;
+            Mode = mode;
+            CacheMode = cacheMode;
+        }
+
+        public Type PageType { get; private set; }
+        public object Parameter { get; private set; }
+        public NavigationMode Mode { get; private set; }
+        public NavigationCacheMode CacheMode { get; private set; }
+    }
+
+    /// <summary>Implemented by pages that need navigation lifecycle callbacks.</summary>
+    public interface INavigationAware
+    {
+        void OnNavigatedTo(NavigationEventArgs e);
+        void OnNavigatedFrom(NavigationEventArgs e);
+    }
+
     /// <summary>Base class for navigable pages.</summary>
-    public class FluentPage : UserControl
+    public class FluentPage : UserControl, INavigationAware
     {
         private ThemeSubscription _themeSubscription;
 
@@ -25,6 +66,30 @@ namespace WinformUi.Controls
             Padding = new Padding(24, 16, 24, 24);
         }
 
+        [Category("Fluent")]
+        [DefaultValue(NavigationCacheMode.Enabled)]
+        public NavigationCacheMode NavigationCacheMode { get; set; } = NavigationCacheMode.Enabled;
+
+        void INavigationAware.OnNavigatedTo(NavigationEventArgs e)
+        {
+            OnNavigatedTo(e);
+        }
+
+        void INavigationAware.OnNavigatedFrom(NavigationEventArgs e)
+        {
+            OnNavigatedFrom(e);
+        }
+
+        /// <summary>Called after this page becomes the current page.</summary>
+        protected virtual void OnNavigatedTo(NavigationEventArgs e)
+        {
+        }
+
+        /// <summary>Called before this page stops being the current page.</summary>
+        protected virtual void OnNavigatedFrom(NavigationEventArgs e)
+        {
+        }
+
         protected Color SurfaceColor => ControlHelper.BlendOverParent(this, ApplicationThemeManager.Palette.LayerFillDefault);
 
         protected override void OnPaint(PaintEventArgs e)
@@ -38,7 +103,26 @@ namespace WinformUi.Controls
             base.OnHandleCreated(e);
             if (_themeSubscription == null)
             {
-                _themeSubscription = new ThemeSubscription(this, () => BackColor = SurfaceColor);
+                _themeSubscription = new ThemeSubscription(this, QueueSurfaceColor);
+            }
+        }
+
+        // The theme event reaches a page before its window applies the new background, so
+        // blending then would freeze the page on the previous theme's color. Posting the
+        // update lets the whole notification, window included, finish first.
+        private void QueueSurfaceColor()
+        {
+            if (IsHandleCreated && !IsDisposed)
+            {
+                BeginInvoke((Action)UpdateSurfaceColor);
+            }
+        }
+
+        private void UpdateSurfaceColor()
+        {
+            if (!IsDisposed)
+            {
+                BackColor = SurfaceColor;
             }
         }
 
@@ -55,15 +139,65 @@ namespace WinformUi.Controls
     }
 
     /// <summary>
-    /// Navigation host with history. Pages are cached by type and
-    /// docked into the frame; the surface gets the Fluent layer treatment.
+    /// Navigation host with parameter-aware history and configurable page caching.
     /// </summary>
     [System.ComponentModel.ToolboxItem(false)]
     public class FluentFrame : Panel
     {
-        private readonly Dictionary<Type, Control> _cache = new Dictionary<Type, Control>();
-        private readonly List<Type> _history = new List<Type>();
+        private sealed class NavigationKey : IEquatable<NavigationKey>
+        {
+            private readonly int _hashCode;
+
+            public NavigationKey(Type pageType, object parameter)
+            {
+                PageType = pageType;
+                Parameter = parameter;
+                try
+                {
+                    _hashCode = pageType.GetHashCode() ^ (parameter == null ? 0 : parameter.GetHashCode());
+                }
+                catch
+                {
+                    _hashCode = pageType.GetHashCode();
+                }
+            }
+
+            public Type PageType { get; private set; }
+            public object Parameter { get; private set; }
+
+            public bool Equals(NavigationKey other)
+            {
+                return other != null && PageType == other.PageType && object.Equals(Parameter, other.Parameter);
+            }
+
+            public override bool Equals(object obj)
+            {
+                return Equals(obj as NavigationKey);
+            }
+
+            public override int GetHashCode()
+            {
+                return _hashCode;
+            }
+        }
+
+        private sealed class HistoryEntry
+        {
+            public NavigationKey Key;
+        }
+
+        private sealed class CacheEntry
+        {
+            public NavigationKey Key;
+            public Control Page;
+        }
+
+        private readonly Dictionary<NavigationKey, CacheEntry> _cache = new Dictionary<NavigationKey, CacheEntry>();
+        private readonly List<CacheEntry> _cacheOrder = new List<CacheEntry>();
+        private readonly List<HistoryEntry> _history = new List<HistoryEntry>();
         private int _historyIndex = -1;
+        private int _cacheSize = 10;
+        private NavigationKey _currentKey;
         private ThemeSubscription _themeSubscription;
 
         public event EventHandler Navigated;
@@ -76,13 +210,50 @@ namespace WinformUi.Controls
         }
 
         [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public Control CurrentPage { get; private set; }
 
         [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Type CurrentPageType => _currentKey?.PageType;
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public object CurrentParameter => _currentKey?.Parameter;
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public NavigationCacheMode CurrentCacheMode { get; private set; }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public bool CanGoBack => _historyIndex > 0;
 
         [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public bool CanGoForward => _historyIndex >= 0 && _historyIndex < _history.Count - 1;
+
+        /// <summary>Maximum number of Enabled pages retained in the cache. Required pages are never counted.</summary>
+        [DefaultValue(10)]
+        public int CacheSize
+        {
+            get { return _cacheSize; }
+            set
+            {
+                if (value < 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                }
+
+                _cacheSize = value;
+                TrimCache(CurrentPage);
+            }
+        }
+
+        /// <summary>Optional factory used instead of the page type's parameterless constructor.</summary>
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Func<Type, object, Control> PageFactory { get; set; }
 
         protected FluentPalette Palette => ApplicationThemeManager.Palette;
 
@@ -97,46 +268,12 @@ namespace WinformUi.Controls
 
         public Control Navigate(Type pageType)
         {
-            if (pageType == null || !typeof(Control).IsAssignableFrom(pageType))
-            {
-                throw new ArgumentException("pageType must be a Control type.", nameof(pageType));
-            }
+            return Navigate(pageType, null);
+        }
 
-            Control page;
-            if (!_cache.TryGetValue(pageType, out page))
-            {
-                page = (Control)Activator.CreateInstance(pageType);
-                page.Dock = DockStyle.Fill;
-                _cache[pageType] = page;
-                Controls.Add(page);
-            }
-
-            CurrentPage = page;
-            page.BringToFront();
-            page.Visible = true;
-
-            foreach (Control other in Controls)
-            {
-                if (other != page)
-                {
-                    other.Visible = false;
-                }
-            }
-
-            if (_historyIndex < 0 || _history[_historyIndex] != pageType)
-            {
-                if (_historyIndex < _history.Count - 1)
-                {
-                    _history.RemoveRange(_historyIndex + 1, _history.Count - _historyIndex - 1);
-                }
-
-                _history.Add(pageType);
-                _historyIndex = _history.Count - 1;
-            }
-
-            OnNavigated(EventArgs.Empty);
-            ScheduleRepaint();
-            return page;
+        public Control Navigate(Type pageType, object parameter)
+        {
+            return NavigateCore(pageType, parameter, NavigationMode.New, true);
         }
 
         public T Navigate<T>() where T : Control
@@ -144,12 +281,17 @@ namespace WinformUi.Controls
             return (T)Navigate(typeof(T));
         }
 
+        public T Navigate<T>(object parameter) where T : Control
+        {
+            return (T)Navigate(typeof(T), parameter);
+        }
+
         public void GoBack()
         {
             if (CanGoBack)
             {
                 _historyIndex--;
-                NavigateCached(_history[_historyIndex]);
+                NavigateCore(_history[_historyIndex], NavigationMode.Back);
             }
         }
 
@@ -158,22 +300,191 @@ namespace WinformUi.Controls
             if (CanGoForward)
             {
                 _historyIndex++;
-                NavigateCached(_history[_historyIndex]);
+                NavigateCore(_history[_historyIndex], NavigationMode.Forward);
             }
         }
 
-        private void NavigateCached(Type pageType)
+        private void NavigateCore(HistoryEntry entry, NavigationMode mode)
         {
-            Control page = _cache[pageType];
-            CurrentPage = page;
-            page.BringToFront();
-            foreach (Control other in Controls)
+            NavigateCore(entry.Key.PageType, entry.Key.Parameter, mode, false);
+        }
+
+        private Control NavigateCore(Type pageType, object parameter, NavigationMode mode, bool addToHistory)
+        {
+            if (pageType == null || !typeof(Control).IsAssignableFrom(pageType))
             {
-                other.Visible = other == page;
+                throw new ArgumentException("pageType must be a Control type.", nameof(pageType));
             }
 
-            OnNavigated(EventArgs.Empty);
+            var key = new NavigationKey(pageType, parameter);
+            bool samePage = _currentKey != null && _currentKey.Equals(key) && CurrentPage != null && !CurrentPage.IsDisposed;
+
+            if (samePage)
+            {
+                NotifyPage(CurrentPage, true, new NavigationEventArgs(pageType, parameter, NavigationMode.Refresh, CurrentCacheMode));
+                OnNavigated(new NavigationEventArgs(pageType, parameter, NavigationMode.Refresh, CurrentCacheMode));
+                ScheduleRepaint();
+                return CurrentPage;
+            }
+
+            Control target = GetOrCreatePage(key);
+
+            if (CurrentPage != null && !CurrentPage.IsDisposed)
+            {
+                NotifyPage(CurrentPage, false, new NavigationEventArgs(CurrentPageType, CurrentParameter, mode, CurrentCacheMode));
+                if (CurrentCacheMode == NavigationCacheMode.Disabled || (CurrentCacheMode == NavigationCacheMode.Enabled && _cacheSize == 0))
+                {
+                    DisposePage(CurrentPage);
+                }
+            }
+
+            if (addToHistory)
+            {
+                if (_historyIndex >= 0 && _historyIndex < _history.Count - 1)
+                {
+                    _history.RemoveRange(_historyIndex + 1, _history.Count - _historyIndex - 1);
+                }
+
+                _history.Add(new HistoryEntry { Key = key });
+                _historyIndex = _history.Count - 1;
+            }
+
+            _currentKey = key;
+            CurrentPage = target;
+            CurrentCacheMode = GetCacheMode(target);
+            target.Dock = DockStyle.Fill;
+            target.BringToFront();
+            target.Visible = true;
+
+            foreach (Control other in Controls)
+            {
+                if (other != target)
+                {
+                    other.Visible = false;
+                }
+            }
+
+            NotifyPage(target, true, new NavigationEventArgs(pageType, parameter, mode, CurrentCacheMode));
+            OnNavigated(new NavigationEventArgs(pageType, parameter, mode, CurrentCacheMode));
             ScheduleRepaint();
+            return target;
+        }
+
+        private Control GetOrCreatePage(NavigationKey key)
+        {
+            CacheEntry cached;
+            if (_cache.TryGetValue(key, out cached))
+            {
+                if (!cached.Page.IsDisposed)
+                {
+                    _cacheOrder.Remove(cached);
+                    _cacheOrder.Add(cached);
+                    return cached.Page;
+                }
+
+                // Callers may dispose a page they were handed back; drop the stale entry
+                // and fall through to creating a fresh one.
+                _cacheOrder.Remove(cached);
+                _cache.Remove(key);
+            }
+
+            Control page = PageFactory == null ? Activator.CreateInstance(key.PageType) as Control : PageFactory(key.PageType, key.Parameter);
+            if (page == null)
+            {
+                throw new InvalidOperationException("The page factory did not create a Control.");
+            }
+
+            page.Dock = DockStyle.Fill;
+            Controls.Add(page);
+            page.Visible = false;
+
+            NavigationCacheMode mode = GetCacheMode(page);
+            if (mode != NavigationCacheMode.Disabled && (mode == NavigationCacheMode.Required || _cacheSize > 0))
+            {
+                var entry = new CacheEntry { Key = key, Page = page };
+                _cache[key] = entry;
+                _cacheOrder.Add(entry);
+                TrimCache(CurrentPage, page);
+            }
+
+            return page;
+        }
+
+        private NavigationCacheMode GetCacheMode(Control page)
+        {
+            var fluentPage = page as FluentPage;
+            return fluentPage?.NavigationCacheMode ?? NavigationCacheMode.Enabled;
+        }
+
+        private void NotifyPage(Control page, bool entering, NavigationEventArgs e)
+        {
+            var aware = page as INavigationAware;
+            if (aware == null)
+            {
+                return;
+            }
+
+            if (entering)
+            {
+                aware.OnNavigatedTo(e);
+            }
+            else
+            {
+                aware.OnNavigatedFrom(e);
+            }
+        }
+
+        private void TrimCache(Control keep)
+        {
+            TrimCache(keep, null);
+        }
+
+        private void TrimCache(Control keepCurrent, Control keepTarget)
+        {
+            int enabledCount = 0;
+            foreach (CacheEntry entry in _cacheOrder)
+            {
+                if (GetCacheMode(entry.Page) == NavigationCacheMode.Enabled)
+                {
+                    enabledCount++;
+                }
+            }
+
+            for (int i = 0; i < _cacheOrder.Count && enabledCount > _cacheSize; i++)
+            {
+                CacheEntry entry = _cacheOrder[i];
+                if (entry.Page == keepCurrent || entry.Page == keepTarget || GetCacheMode(entry.Page) != NavigationCacheMode.Enabled)
+                {
+                    continue;
+                }
+
+                _cacheOrder.RemoveAt(i);
+                _cache.Remove(entry.Key);
+                enabledCount--;
+                i--;
+                DisposePage(entry.Page);
+            }
+        }
+
+        private void DisposePage(Control page)
+        {
+            if (page == null)
+            {
+                return;
+            }
+
+            if (_currentKey != null)
+            {
+                CacheEntry cached;
+                if (_cache.TryGetValue(_currentKey, out cached) && cached.Page == page)
+                {
+                    _cacheOrder.Remove(cached);
+                    _cache.Remove(_currentKey);
+                }
+            }
+
+            Controls.Remove(page);
+            page.Dispose();
         }
 
         private void ScheduleRepaint()
@@ -189,8 +500,11 @@ namespace WinformUi.Controls
             {
                 BeginInvoke((Action)(() =>
                 {
-                    CurrentPage.Invalidate(true);
-                    CurrentPage.Refresh();
+                    if (CurrentPage != null)
+                    {
+                        CurrentPage.Invalidate(true);
+                        CurrentPage.Refresh();
+                    }
                 }));
             }
             else
@@ -241,6 +555,9 @@ namespace WinformUi.Controls
             {
                 _themeSubscription?.Dispose();
                 _themeSubscription = null;
+                _cache.Clear();
+                _cacheOrder.Clear();
+                _history.Clear();
             }
 
             base.Dispose(disposing);
@@ -270,6 +587,24 @@ namespace WinformUi.Controls
         {
             return Content ?? string.Empty;
         }
+    }
+
+    /// <summary>A non-selectable group header in a NavigationView menu.</summary>
+    public class NavigationViewItemHeader : NavigationViewItem
+    {
+        public NavigationViewItemHeader()
+        {
+        }
+
+        public NavigationViewItemHeader(string text)
+        {
+            Content = text;
+        }
+    }
+
+    /// <summary>A non-selectable separator line in a NavigationView menu.</summary>
+    public class NavigationViewItemSeparator : NavigationViewItem
+    {
     }
 
     /// <summary>
@@ -380,7 +715,7 @@ namespace WinformUi.Controls
 
         public void SelectItem(NavigationViewItem item, bool navigate)
         {
-            if (item == null || _selectedItem == item)
+            if (item == null || _selectedItem == item || item is NavigationViewItemHeader || item is NavigationViewItemSeparator)
             {
                 return;
             }
@@ -388,7 +723,7 @@ namespace WinformUi.Controls
             _selectedItem = item;
             if (navigate && item.TargetPageType != null)
             {
-                _frame.Navigate(item.TargetPageType);
+                _frame.Navigate(item.TargetPageType, item.Tag);
             }
 
             OnSelectionChanged(EventArgs.Empty);
@@ -402,15 +737,54 @@ namespace WinformUi.Controls
 
         private RectangleF HamburgerRect => new RectangleF(4, 4, 40, 40);
 
+        private float GetItemHeight(NavigationViewItem item)
+        {
+            if (item is NavigationViewItemHeader)
+            {
+                return _isPaneOpen ? 34f : 0f;
+            }
+
+            if (item is NavigationViewItemSeparator)
+            {
+                return _isPaneOpen ? 16f : 12f;
+            }
+
+            return ItemHeight;
+        }
+
+        private float GetFooterHeight(int count)
+        {
+            float height = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                height += GetItemHeight(_footerItems[i]);
+            }
+
+            return height;
+        }
+
         private RectangleF ItemRect(int index)
         {
-            return new RectangleF(4, HamburgerRowHeight + index * ItemHeight, EffectivePaneWidth - 8, ItemHeight - 2);
+            float y = HamburgerRowHeight;
+            for (int i = 0; i < index; i++)
+            {
+                y += GetItemHeight(_menuItems[i]);
+            }
+
+            float height = GetItemHeight(_menuItems[index]);
+            return new RectangleF(4, y, EffectivePaneWidth - 8, Math.Max(0, height - 2));
         }
 
         private RectangleF FooterItemRect(int index)
         {
-            float y = Height - (_footerItems.Count - index) * ItemHeight - 4;
-            return new RectangleF(4, y, EffectivePaneWidth - 8, ItemHeight - 2);
+            float y = Height - GetFooterHeight(_footerItems.Count) - 4;
+            for (int i = 0; i < index; i++)
+            {
+                y += GetItemHeight(_footerItems[i]);
+            }
+
+            float height = GetItemHeight(_footerItems[index]);
+            return new RectangleF(4, y, EffectivePaneWidth - 8, Math.Max(0, height - 2));
         }
 
         /// <summary>Returns (list, index) for a point: 0 hamburger, 1 menu, 2 footer.</summary>
@@ -424,6 +798,11 @@ namespace WinformUi.Controls
 
             for (int i = 0; i < _menuItems.Count; i++)
             {
+                if (_menuItems[i] is NavigationViewItemHeader || _menuItems[i] is NavigationViewItemSeparator)
+                {
+                    continue;
+                }
+
                 if (ItemRect(i).Contains(point))
                 {
                     index = i;
@@ -433,6 +812,11 @@ namespace WinformUi.Controls
 
             for (int i = 0; i < _footerItems.Count; i++)
             {
+                if (_footerItems[i] is NavigationViewItemHeader || _footerItems[i] is NavigationViewItemSeparator)
+                {
+                    continue;
+                }
+
                 if (FooterItemRect(i).Contains(point))
                 {
                     index = i;
@@ -511,13 +895,13 @@ namespace WinformUi.Controls
             // Menu items
             for (int i = 0; i < _menuItems.Count; i++)
             {
-                DrawItem(g, _menuItems[i], ItemRect(i), _hoverIndex == i);
+                DrawMenuItem(g, _menuItems[i], ItemRect(i), _hoverIndex == i);
             }
 
             // Separator above footer
             if (_footerItems.Count > 0)
             {
-                float y = Height - _footerItems.Count * ItemHeight - 8;
+                float y = Height - GetFooterHeight(_footerItems.Count) - 8;
                 using (var pen = new Pen(ControlHelper.BlendOverParent(this, Palette.DividerStrokeDefault), 1f))
                 {
                     g.DrawLine(pen, 8, y, EffectivePaneWidth - 8, y);
@@ -526,8 +910,48 @@ namespace WinformUi.Controls
 
             for (int i = 0; i < _footerItems.Count; i++)
             {
-                DrawItem(g, _footerItems[i], FooterItemRect(i), _hoverIndex == 1000 + i);
+                DrawMenuItem(g, _footerItems[i], FooterItemRect(i), _hoverIndex == 1000 + i);
             }
+        }
+
+        private void DrawMenuItem(Graphics g, NavigationViewItem item, RectangleF rect, bool hovered)
+        {
+            var header = item as NavigationViewItemHeader;
+            if (header != null)
+            {
+                if (!_isPaneOpen || rect.Height <= 0)
+                {
+                    return;
+                }
+
+                float textX = rect.X + 16;
+                if (header.Icon != SymbolRegular.Empty)
+                {
+                    var iconRect = new RectangleF(rect.X + 12, rect.Y + (rect.Height - 16) / 2f, 16, 16);
+                    FluentGraphics.DrawGlyph(g, FluentGraphics.Glyph((int)header.Icon), FluentTypography.IconRegular(12f), Palette.TextFillSecondary, iconRect);
+                    textX = rect.X + 40;
+                }
+
+                using (var format = new StringFormat { LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap, Trimming = StringTrimming.EllipsisCharacter })
+                {
+                    FluentGraphics.DrawText(g, header.Content ?? string.Empty, Font, Palette.TextFillSecondary, new RectangleF(textX, rect.Y, rect.Right - textX - 4, rect.Height), format);
+                }
+
+                return;
+            }
+
+            if (item is NavigationViewItemSeparator)
+            {
+                float y = rect.Y + rect.Height / 2f;
+                using (var pen = new Pen(ControlHelper.BlendOverParent(this, Palette.DividerStrokeDefault), 1f))
+                {
+                    g.DrawLine(pen, rect.X + 12, y, rect.Right - 12, y);
+                }
+
+                return;
+            }
+
+            DrawItem(g, item, rect, hovered);
         }
 
         private void DrawItem(Graphics g, NavigationViewItem item, RectangleF rect, bool hovered)

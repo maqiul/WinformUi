@@ -1,6 +1,71 @@
 # Dialog and Popup Controls
 
-This document covers the dialogs and popups in WinformUi: `FluentContentDialog` (a modal in-form content dialog), `FluentFlyout` (an anchored popup), `FluentPopupForm` (a borderless rounded popup form) and `FluentToolTip` (a Fluent-styled tooltip). All of them live in the `WinformUi.Controls` namespace. The example code omits the `using` lines; when using it, import namespaces such as `System`, `System.Drawing`, `System.Windows.Forms`, `WinformUi.Controls`, `WinformUi.Theming`.
+This document covers the dialogs and popups in WinformUi: `FluentMessageBox` (a Fluent message box), `FluentContentDialog` (a modal in-form content dialog), `FluentFlyout` (an anchored popup), `FluentPopupForm` (a borderless rounded popup form) and `FluentToolTip` (a Fluent-styled tooltip). All of them live in the `WinformUi.Controls` namespace. The example code omits the `using` lines; when using it, import namespaces such as `System`, `System.Drawing`, `System.Windows.Forms`, `WinformUi.Controls`, `WinformUi.Theming`.
+
+## FluentMessageBox
+
+A Fluent message box: a static class that pops a borderless, rounded, theme-aware modal dialog with
+an optional severity glyph and title on top and a button footer under a divider line, returning a
+`DialogResult` synchronously.
+
+### Methods
+
+| Overload | Description |
+| --- | --- |
+| `static DialogResult Show(string text)` | Body text only: no title, no icon, a single OK button. |
+| `static DialogResult Show(string text, string title)` | With a title and a single OK button. |
+| `static DialogResult Show(IWin32Window owner, string text, string title, MessageBoxButtons buttons, MessageBoxIcon icon)` | Full overload. A null `owner` falls back to the application's active form (or screen centering when there is none); `buttons` selects the button set; `icon` selects the severity glyph beside the title. |
+
+Both parameters are standard WinForms enums:
+
+| MessageBoxButtons | Buttons (left to right) | Primary |
+| --- | --- | --- |
+| OK | OK | OK |
+| OKCancel | OK, Cancel | OK |
+| YesNo | Yes, No | Yes |
+| YesNoCancel | Yes, No, Cancel | Yes |
+| RetryCancel | Retry, Cancel | Retry |
+| AbortRetryIgnore | Abort, Retry, Ignore | Retry |
+
+| MessageBoxIcon | Glyph | Color |
+| --- | --- | --- |
+| None | Not drawn | — |
+| Information | Info symbol | `SystemFillAttention` |
+| Warning | Warning triangle | `SystemFillCaution` |
+| Error | Error circle | `SystemFillCritical` |
+| Question | Question mark | `SystemFillAttention` |
+
+### Example
+
+```csharp
+// The simplest notice
+FluentMessageBox.Show("Saved to the clipboard");
+
+// A confirmation
+if (FluentMessageBox.Show(null, "This cannot be undone. Continue?", "Delete record",
+        MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+{
+    DeleteSelected();
+}
+
+// Owned by a parent form for positioning and ownership
+DialogResult result = FluentMessageBox.Show(this, "The request failed. Retry?", "Offline",
+    MessageBoxButtons.RetryCancel, MessageBoxIcon.Error);
+```
+
+### Notes
+
+- The dialog is `FormBorderStyle.None` with a rounded Region, `ShowInTaskbar = false`,
+  `TopMost = true`, `StartPosition = CenterParent`; it is 440 pixels wide and its height follows the
+  wrapped body text.
+- The primary button uses `ControlAppearance.Primary` and becomes the `AcceptButton` (Enter); the
+  button carrying `DialogResult.Cancel` becomes the `CancelButton` (Esc). Button captions are the
+  English OK/Cancel/Yes/No/Retry/Abort/Ignore — use `FluentContentDialog` when you need localized
+  captions.
+- `Show` is a blocking modal call whose return value is the button clicked; the internal dialog
+  instance is disposed before it returns.
+- When both the title and the icon are empty the header is skipped and the dialog is more compact; a
+  title without an icon renders the text alone.
 
 ## FluentContentDialog
 

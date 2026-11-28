@@ -63,6 +63,10 @@ namespace WinformUi.Gallery
             _timer.Tick += (s, e) =>
             {
                 _determinate.Value = (_determinate.Value + 1) % 101;
+                if (_taskbar != null && _taskbar.State == TaskbarProgressState.Normal)
+                {
+                    _taskbar.Value = (int)_determinate.Value;
+                }
             };
             _timer.Start();
 
@@ -90,6 +94,56 @@ namespace WinformUi.Gallery
             var arcRow = AddRow();
             arcRow.Controls.Add(WithMargin(new FluentArc { StartAngle = -90, EndAngle = 180 }));
             arcRow.Controls.Add(WithMargin(new FluentArc { StartAngle = 0, EndAngle = 270, Thickness = 8, Size = new Size(64, 64) }));
+
+            AddSection("Taskbar button");
+            AddDescription("Progress is drawn on the window's taskbar button; the Normal bar follows the progress bar above.");
+            var taskbarRow = AddRow();
+            var tbNormal = WithMargin(new FluentButton { Text = "Normal", AutoSize = true });
+            var tbPaused = WithMargin(new FluentButton { Text = "Paused", AutoSize = true });
+            var tbError = WithMargin(new FluentButton { Text = "Error", AutoSize = true });
+            var tbIndeterminate = WithMargin(new FluentButton { Text = "Indeterminate", AutoSize = true });
+            var tbClear = WithMargin(new FluentButton { Text = "Clear", AutoSize = true });
+            tbNormal.Click += (s, e) =>
+            {
+                AttachTaskbar();
+                _taskbar.State = TaskbarProgressState.Normal;
+            };
+            tbPaused.Click += (s, e) =>
+            {
+                AttachTaskbar();
+                _taskbar.State = TaskbarProgressState.Paused;
+            };
+            tbError.Click += (s, e) =>
+            {
+                AttachTaskbar();
+                _taskbar.State = TaskbarProgressState.Error;
+            };
+            tbIndeterminate.Click += (s, e) =>
+            {
+                AttachTaskbar();
+                _taskbar.State = TaskbarProgressState.Indeterminate;
+            };
+            tbClear.Click += (s, e) =>
+            {
+                AttachTaskbar();
+                _taskbar.Reset();
+            };
+            taskbarRow.Controls.AddRange(new Control[] { tbNormal, tbPaused, tbError, tbIndeterminate, tbClear });
+        }
+
+        private FluentTaskbarProgress _taskbar;
+
+        private void AttachTaskbar()
+        {
+            if (_taskbar == null)
+            {
+                _taskbar = new FluentTaskbarProgress();
+            }
+
+            if (_taskbar.Form == null)
+            {
+                _taskbar.Form = FindForm();
+            }
         }
 
         protected override void Dispose(bool disposing)
@@ -98,6 +152,10 @@ namespace WinformUi.Gallery
             {
                 _timer.Stop();
                 _timer.Dispose();
+                if (_taskbar != null)
+                {
+                    _taskbar.Dispose();
+                }
             }
 
             base.Dispose(disposing);

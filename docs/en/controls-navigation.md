@@ -13,34 +13,73 @@ namespaces such as `System`, `System.Drawing`, `System.Windows.Forms`, `WinformU
 
 ## FluentPage
 
-Base class for navigable pages (derives from `UserControl`): opaque layered surface, automatic
-DPI scaling, and its background color updates automatically on theme switches.
+Base class for navigable pages (derives from `UserControl` and implements `INavigationAware`):
+opaque layered surface, automatic DPI scaling, and its background color updates automatically on
+theme switches.
 
 ### Properties
 
-This class declares no new public properties; it inherits all UserControl properties.
-Constructor presets: `Padding = new Padding(24, 16, 24, 24)`,
-`AutoScaleMode = AutoScaleMode.Dpi`, background set to the theme's Layer surface color.
-The protected property `SurfaceColor` (Color) lets derived classes read the current layer
-surface color.
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| NavigationCacheMode | NavigationCacheMode | Enabled | How the host `FluentFrame` caches this page; see the enum notes below. |
+
+Other than that it inherits all UserControl properties. Constructor presets:
+`Padding = new Padding(24, 16, 24, 24)`, `AutoScaleMode = AutoScaleMode.Dpi`, background set to
+the theme's Layer surface color. The protected property `SurfaceColor` (Color) lets derived
+classes read the current layer surface color.
 
 ### Events
 
-This class declares no new events; it inherits the standard Control/UserControl events.
+This class declares no new events; it inherits the standard Control/UserControl events. Page
+lifecycle is obtained by overriding the virtual methods:
+
+| Protected virtual method | Description |
+| --- | --- |
+| `virtual void OnNavigatedTo(NavigationEventArgs e)` | Called after the page becomes the current page (including arriving via forward/back/refresh). |
+| `virtual void OnNavigatedFrom(NavigationEventArgs e)` | Called just before the page stops being the current page. |
+
+`INavigationAware` is implemented explicitly on `FluentPage`, so derived classes only override the
+`protected virtual` version. To get lifecycle callbacks on an arbitrary `Control` that does not
+derive from `FluentPage`, implement `INavigationAware` yourself.
+
+### NavigationCacheMode
+
+| Value | Description |
+| --- | --- |
+| Disabled | Not cached. The instance is `Dispose`d when the page leaves and a new one is built on the next visit. |
+| Enabled | Cached, bounded by `FluentFrame.CacheSize` (the default). Least-recently-used pages are evicted beyond the limit. |
+| Required | Always cached; never counted against `CacheSize` and never evicted. Suitable for pages holding expensive state. |
+
+### NavigationMode and NavigationEventArgs
+
+`NavigationMode` states how the page was reached: `New` (fresh navigation), `Back`, `Forward`, or
+`Refresh` (re-navigating to the same "type + parameter", which only replays the history position).
+
+`NavigationEventArgs` carries `PageType` (Type), `Parameter` (object), `Mode` (NavigationMode) and
+`CacheMode` (NavigationCacheMode).
 
 ### Example
 
 ```csharp
-public class HomePage : FluentPage
+public class DetailPage : FluentPage
 {
-    public HomePage()
+    private readonly FluentLabel _title = new FluentLabel { AutoSize = true };
+
+    public DetailPage()
     {
-        Controls.Add(new FluentLabel
-        {
-            Text = "欢迎",
-            AutoSize = true,
-            Location = new Point(24, 24)
-        });
+        // Instances are reused per identical parameter; different orders cache separately
+        NavigationCacheMode = NavigationCacheMode.Enabled;
+        Controls.Add(_title);
+    }
+
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        _title.Text = "Order " + e.Parameter;
+    }
+
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        // Stop animations / commit edits before leaving
     }
 }
 ```
@@ -50,44 +89,65 @@ public class HomePage : FluentPage
 - The page background is deliberately kept opaque: a transparent background on a real window
   handle would trigger recursive parent painting and leave artifacts; do not set its BackColor
   to Transparent.
+- On a theme switch the page recalculates its background only after the notification round has
+  finished. A page hears the theme event before its host window repaints, so blending then would
+  composite the new token over the window's previous background and freeze there — a washed-out
+  gray surface under the dark theme.
 
 ## FluentFrame
 
-Navigation host with history (derives from `Panel`): caches page instances by type and docks
-them for display, and the content area paints a Fluent layer surface with a rounded top-left
-corner.
+Navigation host with parameter-aware history and configurable caching (derives from `Panel`):
+instances are cached by "page type + navigation parameter", docked for display, and the content
+area paints a Fluent layer surface with a rounded top-left corner.
 
 ### Properties
 
 | Property | Type | Default | Description |
 | --- | --- | --- | --- |
 | CurrentPage | Control | null | Read-only, the page instance currently displayed. |
+| CurrentPageType | Type | null | Read-only, the type of the current page. |
+| CurrentParameter | object | null | Read-only, the navigation parameter used to reach the current page. |
+| CurrentCacheMode | NavigationCacheMode | Enabled | Read-only, the cache mode in effect for the current page (any non-`FluentPage` counts as Enabled). |
 | CanGoBack | bool | false | Read-only, whether back navigation is possible in the history stack. |
 | CanGoForward | bool | false | Read-only, whether forward navigation is possible in the history stack. |
+| CacheSize | int | 10 | Maximum number of Enabled pages kept; 0 disables caching entirely. Assigning a negative value throws `ArgumentOutOfRangeException`. `Required` pages are not counted. |
+| PageFactory | Func&lt;Type, object, Control&gt; | null | Optional page factory used instead of the parameterless constructor. Arguments are the page type and the navigation parameter; returning null throws `InvalidOperationException`. |
 
 ### Events
 
 | Event | Description |
 | --- | --- |
-| Navigated | Raised after every completed navigation, including Navigate, GoBack, GoForward. |
+| Navigated | Raised after every completed navigation, including Navigate, GoBack, GoForward and same-page refresh. The argument is a `NavigationEventArgs` (see the FluentPage/FluentFrame sections). |
 
 Public methods:
 
 | Method | Description |
 | --- | --- |
-| Control Navigate(Type pageType) | Navigates to the given page type (must be a Control type); on first visit an instance is created via the parameterless constructor and cached; returns the page instance. |
+| Control Navigate(Type pageType) | Navigates to the given page type (must be a Control type) with a null parameter and returns the page instance. |
+| Control Navigate(Type pageType, object parameter) | Navigates with a parameter. The parameter takes part in the cache key and in history, so the same type with different parameters yields different instances; read it back from `e.Parameter` in `OnNavigatedTo`. |
 | T Navigate&lt;T&gt;() where T : Control | Generic navigation, returns a strongly-typed page. |
-| void GoBack() | Goes back to the previous page in history (no-op when CanGoBack is false). |
-| void GoForward() | Goes forward to the next page in history (no-op when CanGoForward is false). |
+| T Navigate&lt;T&gt;(object parameter) where T : Control | Generic parameterized navigation. |
+| void GoBack() | Goes back to the previous page in history (no-op when CanGoBack is false); `Mode` is Back. |
+| void GoForward() | Goes forward to the next page in history (no-op when CanGoForward is false); `Mode` is Forward. |
 
 ### Example
 
 ```csharp
-var frame = new FluentFrame { Dock = DockStyle.Fill };
-frame.Navigated += (s, e) => Console.WriteLine(frame.CurrentPage.GetType().Name);
+var frame = new FluentFrame { Dock = DockStyle.Fill, CacheSize = 6 };
+
+// Pages without a parameterless constructor are built by the factory
+frame.PageFactory = (type, parameter) =>
+    type == typeof(DetailPage) ? new DetailPage((string)parameter) : (Control)Activator.CreateInstance(type);
+
+frame.Navigated += (s, e) =>
+{
+    var args = (NavigationEventArgs)e;
+    Console.WriteLine(args.PageType.Name + " [" + args.Mode + "] " + args.Parameter);
+};
 
 frame.Navigate<HomePage>();
-frame.Navigate(typeof(SettingsPage));
+frame.Navigate(typeof(DetailPage), "A-1001");
+frame.Navigate(typeof(DetailPage), "A-1002");   // separate instance, does not overwrite the first
 if (frame.CanGoBack) frame.GoBack();
 if (frame.CanGoForward) frame.GoForward();
 
@@ -96,10 +156,18 @@ Controls.Add(frame);
 
 ### Notes
 
-- Pages are cached by Type and instances are reused (switching is just show/hide), so page
-  types must provide a public parameterless constructor.
+- Both the cache key and each history entry are "page type + parameter", so the same type with a
+  different parameter is never mistaken for the same page.
+- Re-navigating to the entry you are already on does not append history: when the current
+  "type + parameter" matches the target exactly, only a `Mode = Refresh` lifecycle callback fires.
+- When `PageFactory` is null the page type must provide a public parameterless constructor; with a
+  factory, the factory handles the parameter.
 - Navigating to a new page from the same position truncates the forward history after it,
   matching browser behavior.
+- On leaving, `Disabled` pages (and `Enabled` pages when `CacheSize = 0`) are disposed immediately;
+  `Enabled` pages beyond `CacheSize` are evicted least-recently-used first, `Required` pages never.
+- Disposing a page you were handed by `Navigate` is allowed: the cache notices the released instance
+  on the next navigation and creates a fresh one instead of touching a disposed control.
 
 ## NavigationViewItem
 
@@ -112,9 +180,42 @@ Menu item of `FluentNavigationView` (plain class, not a control).
 | Content | string | null | Display text of the menu item. |
 | Icon | SymbolRegular | SymbolRegular.Empty | Menu icon; nothing is drawn when set to Empty. |
 | TargetPageType | Type | null | Page type to navigate to on click; when null, the item is only selected without navigating. |
-| Tag | object | null | Arbitrary attached data. |
+| Tag | object | null | Passed as the navigation parameter to `FluentFrame.Navigate(TargetPageType, Tag)`; can still hold attached data. |
 
 Constructors: `NavigationViewItem()`, `NavigationViewItem(string content, SymbolRegular icon, Type targetPageType)`.
+
+### NavigationViewItemHeader and NavigationViewItemSeparator
+
+Both derive from `NavigationViewItem` and group the menu, but they cannot be selected or navigated
+to and are skipped by hit-testing:
+
+| Type | Constructors | Expanded pane | Compact pane |
+| --- | --- | --- | --- |
+| `NavigationViewItemHeader` | `()`, `(string text)` | 34-pixel section caption, only `Content` is drawn (Icon and TargetPageType are ignored) | Height 0, takes no space |
+| `NavigationViewItemSeparator` | `()` | 16-pixel divider line (`DividerStrokeDefault`) | 12 pixels |
+
+```csharp
+navigation.MenuItems.Add(new NavigationViewItemHeader("Controls"));
+navigation.MenuItems.Add(new NavigationViewItem("Buttons", SymbolRegular.Keyboard24, typeof(ButtonsPage)));
+navigation.MenuItems.Add(new NavigationViewItem("Collections", SymbolRegular.List24, typeof(CollectionsPage)));
+navigation.MenuItems.Add(new NavigationViewItemSeparator());
+navigation.MenuItems.Add(new NavigationViewItemHeader("App"));
+navigation.MenuItems.Add(new NavigationViewItem("Settings", SymbolRegular.Settings24, typeof(SettingsPage)));
+navigation.FooterMenuItems.Add(new NavigationViewItem("About", SymbolRegular.Info24, typeof(AboutPage)));
+```
+
+`SelectItem` and mouse clicks skip both types automatically, and `SelectedItem` is never a header
+or a separator.
+
+### Navigating with a parameter
+
+Because `Tag` is the navigation parameter, one page type can be registered several times:
+
+```csharp
+navigation.MenuItems.Add(new NavigationViewItem("Order 1001", SymbolRegular.Document24, typeof(DetailPage)) { Tag = "A-1001" });
+navigation.MenuItems.Add(new NavigationViewItem("Order 1002", SymbolRegular.Document24, typeof(DetailPage)) { Tag = "A-1002" });
+// DetailPage.OnNavigatedTo receives e.Parameter == "A-1001" / "A-1002"
+```
 
 ## FluentNavigationView
 
@@ -126,10 +227,10 @@ content frame (`FluentFrame`) on the right.
 
 | Property | Type | Default | Description |
 | --- | --- | --- | --- |
-| MenuItems | List&lt;NavigationViewItem&gt; | Empty list | Read-only collection, the main menu items (laid out top-down below the hamburger button); populate by calling Add directly. |
-| FooterMenuItems | List&lt;NavigationViewItem&gt; | Empty list | Read-only collection, footer menu items (flush with the bottom, divider line above), typically holds "Settings". |
-| Frame | FluentFrame | Built-in instance | Read-only, the content frame; advanced scenarios can call Navigate/GoBack/GoForward on it directly. |
-| IsPaneOpen | bool | true | Whether the pane is expanded; when false it collapses to 48 pixels wide, showing icons only. |
+| MenuItems | List&lt;NavigationViewItem&gt; | Empty list | Read-only collection, the main menu items (laid out top-down below the hamburger button); populate by calling Add directly. `NavigationViewItemHeader`/`NavigationViewItemSeparator` can be mixed in to group the menu. |
+| FooterMenuItems | List&lt;NavigationViewItem&gt; | Empty list | Read-only collection, footer menu items (flush with the bottom, divider line above), typically holds "Settings". Group headers and separators work here too. |
+| Frame | FluentFrame | Built-in instance | Read-only, the content frame; advanced scenarios can call Navigate (including the parameterized overload)/GoBack/GoForward on it directly, or set `CacheSize` and `PageFactory`. |
+| IsPaneOpen | bool | true | Whether the pane is expanded; when false it collapses to 48 pixels wide, showing icons only (group headers then take no space). |
 | PaneWidth | int | 220 | Pane width in the expanded state (pixels). |
 | SelectedItem | NavigationViewItem | null | The currently selected item; assigning is equivalent to `SelectItem(value, true)` (navigates). |
 
@@ -138,21 +239,27 @@ content frame (`FluentFrame`) on the right.
 | Event | Description |
 | --- | --- |
 | SelectionChanged | Raised when the selection changes: clicking a menu/footer item, calling SelectItem, or setting SelectedItem. |
+| Frame.Navigated | The content frame's navigation event (gives access to `NavigationEventArgs` with Mode/Parameter). |
 
 Public method: `void SelectItem(NavigationViewItem item, bool navigate)` — selects the given
-item; when navigate is true and the item's TargetPageType is non-null, the content frame
-navigates in sync. No-op when item is null or is already the selected item.
+item; when navigate is true and the item's TargetPageType is non-null, the frame is navigated with
+`item.Tag` as the navigation parameter (`_frame.Navigate(TargetPageType, Tag)`). No-op when item
+is null, is already the selected item, or is a group header/separator.
 
 ### Example
 
 Following the real usage in the Gallery main form, menu items are bound to page types through
-`TargetPageType`:
+`TargetPageType` and pass `Tag` as the navigation parameter:
 
 ```csharp
 var navigation = new FluentNavigationView { Dock = DockStyle.Fill };
+navigation.MenuItems.Add(new NavigationViewItemHeader("Browse"));
 navigation.MenuItems.Add(new NavigationViewItem("Home", SymbolRegular.Home24, typeof(HomePage)));
 navigation.MenuItems.Add(new NavigationViewItem("Buttons", SymbolRegular.Keyboard24, typeof(ButtonsPage)));
 navigation.MenuItems.Add(new NavigationViewItem("Collections", SymbolRegular.List24, typeof(CollectionsPage)));
+navigation.MenuItems.Add(new NavigationViewItemSeparator());
+navigation.MenuItems.Add(new NavigationViewItemHeader("Details"));
+navigation.MenuItems.Add(new NavigationViewItem("Order A-1001", SymbolRegular.Document24, typeof(DetailPage)) { Tag = "A-1001" });
 navigation.FooterMenuItems.Add(new NavigationViewItem("Settings", SymbolRegular.Settings24, typeof(SettingsPage)));
 
 navigation.SelectionChanged += (s, e) =>
@@ -160,28 +267,31 @@ navigation.SelectionChanged += (s, e) =>
 
 Controls.Add(navigation);
 
-// Initially select the first item and navigate to HomePage
-navigation.SelectItem(navigation.MenuItems[0], true);
+// Initially select the first selectable item and navigate to HomePage
+navigation.SelectItem(navigation.MenuItems[1], true);
 
 // Only change the highlight, without navigating
-navigation.SelectItem(navigation.MenuItems[1], false);
+navigation.SelectItem(navigation.MenuItems[2], false);
 
 // Collapse/expand the pane
 navigation.IsPaneOpen = false;
 navigation.PaneWidth = 260;
 
-// Use the content frame directly for back/forward navigation
+// Use the content frame directly for parameterized navigation and back/forward
+navigation.Frame.Navigate(typeof(DetailPage), "A-1002");
 navigation.Frame.GoBack();
 ```
 
 ### Notes
 
-- The constructor sets `Dock = DockStyle.Fill`; menu item rows are 38 pixels tall, the
-  hamburger button area is 48 pixels, and the collapsed width is fixed at 48.
+- The constructor sets `Dock = DockStyle.Fill`; regular menu item rows are 38 pixels tall, group
+  headers 34 (0 when collapsed), separators 16 (12 when collapsed), the hamburger button area is
+  48 pixels, and the collapsed width is fixed at 48.
 - Clicking the hamburger button toggles IsPaneOpen; footer items and main menu items share one
   selection state (there is only one SelectedItem at any moment).
-- Pages are cached by type inside the internal FluentFrame; page classes must derive from
-  Control and have a public parameterless constructor (typically derive from FluentPage).
+- Pages are cached by "type + Tag parameter" inside the internal FluentFrame, with `CacheSize = 10`
+  by default. Page classes must derive from Control; unless you set `navigation.Frame.PageFactory`
+  they also need a public parameterless constructor (typically derive from FluentPage).
 
 ## FluentTabPage
 

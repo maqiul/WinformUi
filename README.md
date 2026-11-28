@@ -29,8 +29,8 @@
 | [控件·导航与容器](docs/controls-navigation.md) | NavigationView / TabControl / BreadcrumbBar / StatusBar / Card / Expander / ScrollViewer | [en](docs/en/controls-navigation.md) |
 | [控件·小组件](docs/controls-widgets.md) | Icon / PictureBox / CodeBlock / RichTextBox / ScrollBar / ToolStrip / NotifyIcon / Toast | [en](docs/en/controls-widgets.md) |
 | [控件·布局与窗口](docs/controls-layouts.md) | TabView / GridView / TreeGrid / WrapPanel / UniformGrid / TitleBar / ClientAreaBorder | [en](docs/en/controls-layouts.md) |
-| [控件·进度与反馈](docs/controls-feedback.md) | ProgressBar / ProgressRing / InfoBar / Badge / Snackbar / LoadingScreen | [en](docs/en/controls-feedback.md) |
-| [控件·对话框与弹出](docs/controls-dialogs.md) | ContentDialog / Flyout / PopupForm / ToolTip | [en](docs/en/controls-dialogs.md) |
+| [控件·进度与反馈](docs/controls-feedback.md) | ProgressBar / ProgressRing / InfoBar / Badge / Snackbar / LoadingScreen / TaskbarProgress | [en](docs/en/controls-feedback.md) |
+| [控件·对话框与弹出](docs/controls-dialogs.md) | MessageBox / ContentDialog / Flyout / PopupForm / ToolTip | [en](docs/en/controls-dialogs.md) |
 | [控件·菜单](docs/controls-menus.md) | MenuStrip / ContextMenuStrip / Fluent 渲染器 | [en](docs/en/controls-menus.md) |
 | [窗口](docs/window.md) | FluentWindow、Mica/Acrylic/Tabbed 背景与回退 | [en](docs/en/window.md) |
 | [主题系统](docs/theming.md) | 主题 API、完整设计令牌表、强调色派生、字体排印、自定义控件接入 | [en](docs/en/theming.md) |
@@ -128,15 +128,36 @@ public class MainForm : FluentWindow
 
 ### 导航视图(侧栏 + 页面)
 
-页面继承 `FluentPage`,导航项指定页面类型,`FluentNavigationView` 自带页面宿主与前进 / 后退历史:
+页面继承 `FluentPage`,导航项指定页面类型,`FluentNavigationView` 自带页面宿主与前进 / 后退历史;
+`NavigationViewItemHeader` / `NavigationViewItemSeparator` 负责分组,`Tag` 即导航参数:
 
 ```csharp
 var nav = new FluentNavigationView { Dock = DockStyle.Fill };
+nav.MenuItems.Add(new NavigationViewItemHeader("浏览"));
 nav.MenuItems.Add(new NavigationViewItem("首页", SymbolRegular.Home24, typeof(HomePage)));
 nav.MenuItems.Add(new NavigationViewItem("输入", SymbolRegular.Code24, typeof(InputsPage)));
+nav.MenuItems.Add(new NavigationViewItemSeparator());
+nav.MenuItems.Add(new NavigationViewItemHeader("详情"));
+nav.MenuItems.Add(new NavigationViewItem("订单 A-1001", SymbolRegular.Document24, typeof(DetailPage)) { Tag = "A-1001" });
 nav.FooterMenuItems.Add(new NavigationViewItem("设置", SymbolRegular.Settings24, typeof(SettingsPage)));
 Controls.Add(nav);
-nav.SelectItem(nav.MenuItems[0], true);
+nav.SelectItem(nav.MenuItems[1], true);
+```
+
+页面按「类型 + 参数」缓存,`FluentPage.NavigationCacheMode` 取 `Disabled` / `Enabled` / `Required`,
+宿主 `FluentFrame.CacheSize` 控制上限;重写 `OnNavigatedTo` / `OnNavigatedFrom` 拿到
+`NavigationEventArgs`(含 `Parameter` 与 `Mode`)完成页面生命周期。
+
+```csharp
+public class DetailPage : FluentPage
+{
+    public DetailPage() { NavigationCacheMode = NavigationCacheMode.Enabled; }
+
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        Text = "订单 " + e.Parameter;   // e.Mode: New / Back / Forward / Refresh
+    }
+}
 ```
 
 完整用法见 [samples/WinformUi.Gallery](samples/WinformUi.Gallery)。
@@ -175,8 +196,8 @@ Color text = ApplicationThemeManager.Palette.TextFillPrimary;
 | 日期 / 时间 / 颜色 | `FluentCalendar`、`FluentCalendarDatePicker`、`FluentDatePicker`、`FluentTimePicker`、`FluentColorPicker` |
 | 集合 | `FluentListBox`、`FluentCheckedListBox`、`FluentListView`、`FluentTreeView`、`FluentDataGridView`、`FluentGridView`、`FluentTreeGrid` |
 | 导航 / 容器 | `FluentNavigationView`、`FluentPage`、`FluentFrame`、`FluentTabControl`、`FluentTabPage`、`FluentTabView`、`FluentBreadcrumbBar`、`FluentStatusBar`、`FluentStatusStrip`、`FluentSplitContainer`、`FluentWrapPanel`、`FluentUniformGrid`、`FluentCard`、`FluentCardAction`、`FluentCardColor`、`FluentExpander`、`FluentCardExpander`、`FluentScrollViewer`、`FluentTitleBar`、`FluentClientAreaBorder` |
-| 进度 / 反馈 | `FluentProgressBar`、`FluentProgressRing`、`FluentArc`、`FluentInfoBar`、`FluentBadge`、`FluentInfoBadge`、`FluentSnackbar`、`FluentLoadingScreen`、`FluentErrorProvider`、`FluentToast`、`FluentNotifyIcon` |
-| 对话框 / 弹出 | `FluentContentDialog`、`FluentFlyout`、`FluentPopupForm`、`FluentToolTip` |
+| 进度 / 反馈 | `FluentProgressBar`、`FluentProgressRing`、`FluentArc`、`FluentInfoBar`、`FluentBadge`、`FluentInfoBadge`、`FluentSnackbar`、`FluentLoadingScreen`、`FluentErrorProvider`、`FluentToast`、`FluentNotifyIcon`、`FluentTaskbarProgress`(组件) |
+| 对话框 / 弹出 | `FluentMessageBox`、`FluentContentDialog`、`FluentFlyout`、`FluentPopupForm`、`FluentToolTip` |
 | 菜单 | `FluentMenuStrip`、`FluentToolStrip`、`FluentContextMenuStrip`;原生 `ToolStrip` / `MenuStrip` 可换用 `FluentToolStripRenderer` + `FluentColorTable` |
 
 输入类控件提供圆角外壳、`PlaceholderText`、`Icon`(左侧符号图标);
@@ -207,6 +228,26 @@ Gallery 左侧导航覆盖全部控件分类,Settings 页可切换浅色 / 深�
 
 ## 版本说明
 
+### 1.5.0
+
+- **导航参数与页面缓存**:`FluentFrame.Navigate(pageType, parameter)` 与泛型重载把导航参数纳入
+  缓存键与历史记录,同一页面类型带不同参数得到各自独立的实例;新增 `CacheSize`(默认 10)、
+  `PageFactory`(`Func<Type, object, Control>`,替代无参构造)、`CurrentPageType`、`CurrentParameter`、
+  `CurrentCacheMode`。`FluentPage.NavigationCacheMode` 取 `Disabled` / `Enabled` / `Required`,
+  页面可重写 `OnNavigatedTo` / `OnNavigatedFrom` 取 `NavigationEventArgs`(`Mode` 为
+  `New` / `Back` / `Forward` / `Refresh`);非 `FluentPage` 的控件实现 `INavigationAware` 同样生效。
+- **NavigationView 分组**:`NavigationViewItemHeader` 与 `NavigationViewItemSeparator` 继承自
+  `NavigationViewItem`,可直接混入 `MenuItems` / `FooterMenuItems`;两者不可选中、不参与命中测试,
+  折叠侧栏时标题不占位。`NavigationViewItem.Tag` 现为导航参数,同一页面类型可注册多个入口。
+- **任务栏进度**:新增 `FluentTaskbarProgress` 组件与 `TaskbarProgressState`
+  (`None` / `Indeterminate` / `Normal` / `Error` / `Paused`,数值与壳层 `TBPFLAG` 一致),
+  把确定、不确定、暂停、错误进度画在窗体的任务栏按钮上;`IsSupported` 探测系统能力,
+  不支持时静默降级;属性可从后台线程直接赋值,内部会编组到窗体的 UI 线程再调壳层接口。
+- **深色主题下的页面底色**:切换到深色主题时,`FluentPage` 会先于宿主窗体收到主题通知,
+  于是把新令牌叠在旧背景上算出一个偏亮的底色并固化下来(实测深色的 `#282828` 变成
+  `#C1C1C1`)。现在页面把底色更新推迟到本轮通知全部派发完成之后,导航容器里的页面
+  与窗体背景保持一致。
+
 ### 1.4.2
 
 - 仅包元数据更新，无代码变更：程序集包内声明了项目主页与 git 仓库地址，
@@ -235,6 +276,32 @@ FluentWrapPanel / FluentUniformGrid / FluentGridView / FluentTreeGrid / FluentTi
 Gallery 补充小组件与布局页,工具箱清单与中英文参考手册同步。
 
 ## Release notes
+
+### 1.5.0
+
+- **Navigation parameters and page caching**: `FluentFrame.Navigate(pageType, parameter)` and the
+  generic overloads put the navigation parameter into both the cache key and the history, so the same
+  page type reached with different parameters keeps separate instances. New members: `CacheSize`
+  (10 by default), `PageFactory` (`Func<Type, object, Control>`, used instead of the parameterless
+  constructor), `CurrentPageType`, `CurrentParameter`, `CurrentCacheMode`.
+  `FluentPage.NavigationCacheMode` takes `Disabled` / `Enabled` / `Required`, and pages can override
+  `OnNavigatedTo` / `OnNavigatedFrom` to read `NavigationEventArgs` (`Mode` is `New` / `Back` /
+  `Forward` / `Refresh`); any other control gets the same lifecycle by implementing `INavigationAware`.
+- **NavigationView grouping**: `NavigationViewItemHeader` and `NavigationViewItemSeparator` derive
+  from `NavigationViewItem` and can be mixed straight into `MenuItems` / `FooterMenuItems`. Neither
+  can be selected and both are skipped by hit-testing; headers take no space in the compact pane.
+  `NavigationViewItem.Tag` is now the navigation parameter, so one page type can be registered
+  several times.
+- **Taskbar progress**: new `FluentTaskbarProgress` component with `TaskbarProgressState`
+  (`None` / `Indeterminate` / `Normal` / `Error` / `Paused`, values matching the shell's `TBPFLAG`)
+  to draw determinate, indeterminate, paused and error progress on a form's taskbar button;
+  `IsSupported` probes the OS and the component degrades silently when the shell interface is absent.
+  The properties may be set from a worker thread — the shell call is marshalled onto the thread that
+  owns the form.
+- **Page background under the dark theme**: on a theme switch a `FluentPage` receives the notification
+  before its host window repaints, so it blended the new token over the previous background and froze
+  there — the dark `#282828` surface came out as `#C1C1C1`. The page now defers the recalculation until
+  the notification round, window included, has finished, so navigated pages match the window background.
 
 ### 1.4.2
 
@@ -289,7 +356,7 @@ dotnet pack src/WinformUi/WinformUi.csproj -c Release
 发布到 nuget.org(需要自己的账号与 API Key):
 
 ```bash
-dotnet nuget push src/WinformUi/bin/Release/WinformUi.1.4.2.nupkg \
+dotnet nuget push src/WinformUi/bin/Release/WinformUi.1.5.0.nupkg \
     --api-key <YOUR_API_KEY> --source https://api.nuget.org/v3/index.json
 ```
 
